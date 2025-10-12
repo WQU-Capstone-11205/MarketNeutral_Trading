@@ -18,7 +18,7 @@ from ml_dl_models.rnn_vae import VAEEncoder, vae_loss
 from ml_dl_models.actor_critic import Actor
 from ml_dl_models.actor_critic import Critic
 from util.weighted_replay_buffer import WeightedReplayBuffer
-from util.file_operations import save_models, load_models
+from util.models_io import save_RLmodels
 
 def train_loop(
     stream,
@@ -179,7 +179,7 @@ def train_loop(
         if (epoch + 1) % 10 == 0 or (epoch + 1) == num_epochs:
             meta = {"epoch": epoch, "recon loss": (total_recon/len(data)), "kl loss": (total_kl/len(data))}
             bocpd_cfg = {"bocpd_hazard": bocpd_hazard}
-            save_models(save_dir, actor, critic, encoder,
+            save_RLmodels(save_dir, actor, critic, encoder,
                             actor_opt, critic_opt, opt_vae,
                             bocpd_cfg, meta, step=epoch)
 
