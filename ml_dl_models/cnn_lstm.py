@@ -7,12 +7,12 @@ import torch.nn as nn
 # CNN-LSTM model
 # -------------------------
 class CNNLSTMModel(nn.Module):
-    def __init__(self, input_dim, cnn_channels=32, lstm_hidden=128, kernel_size=3):
+    def __init__(self, input_dim, cnn_channels=32, hidden_dim=128, kernel_size=3):
         super().__init__()
         self.conv = nn.Conv1d(input_dim, cnn_channels, kernel_size=kernel_size, padding=1)
         self.ln = nn.LayerNorm(cnn_channels)
-        self.lstm = nn.LSTM(cnn_channels, lstm_hidden, batch_first=True)
-        self.fc = nn.Linear(lstm_hidden, 1)
+        self.lstm = nn.LSTM(cnn_channels, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, 1)
         nn.init.xavier_uniform_(self.fc.weight); nn.init.zeros_(self.fc.bias)
     def forward(self, x):
         # x: (batch, seq_len, input_dim)
