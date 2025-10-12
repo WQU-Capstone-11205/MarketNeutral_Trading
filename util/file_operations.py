@@ -33,6 +33,7 @@ def load_models(load_dir, actor, critic, vae_encoder,
     with open(os.path.join(load_dir, f"bocpd_cfg{tag}.json")) as f: bocpd_cfg = json.load(f)
     with open(os.path.join(load_dir, f"meta{tag}.json")) as f: meta = json.load(f)
     print(f"Loaded models/opts at step {step}")
+    return bocpd_cfg, meta
 
 def save_lstm_models(save_dir, lstm, vae_encoder,
                     lstm_opt, vae_opt,
@@ -61,6 +62,4 @@ def load_lstm_models(load_dir, lstm, vae_encoder,
     with open(os.path.join(load_dir, f"bocpd_cfg{tag}.json")) as f: bocpd_cfg = json.load(f)
     with open(os.path.join(load_dir, f"meta{tag}.json")) as f: meta = json.load(f)
     print(f"Loaded models/opts at step {step}")
-    return bocpd_cfg, meta
-
     return bocpd_cfg, meta
