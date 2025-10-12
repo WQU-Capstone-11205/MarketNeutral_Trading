@@ -15,7 +15,7 @@ from ml_dl_models.rnn_vae import VAEEncoder, vae_loss
 from ml_dl_models.lstm import LSTMPolicy
 from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.eval_strategy import evaluate_strategy
-from util.file_operations import save_lstm_models
+from util.models_io import save_models
 
 
 def train_loop_lstm(
@@ -161,7 +161,7 @@ def train_loop_lstm(
             best_val_sharpe = val_sharpe
             meta = {"epoch": epoch, "recon loss": (total_recon/len(data)), "kl loss": (total_kl/len(data))}
             bocpd_cfg = {"bocpd_hazard": bocpd_hazard}
-            save_lstm_models(save_dir, policy_lstm, encoder, opt_policy, opt_vae, bocpd_cfg, meta)
+            save_models(save_dir, policy_lstm, encoder, opt_policy, opt_vae, bocpd_cfg, meta)
             print(f"Saved best models at epoch {epoch:03d} (Sharpe={val_sharpe:.3f})")
 
     print("LSTM policy training complete.")
