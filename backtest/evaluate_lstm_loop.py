@@ -73,10 +73,10 @@ def evaluate_lstm_loop(
     state_returns = list(data[:state_window])
     prev_action = torch.zeros(1, 1, device=device)
 
-    actions = []
-    pnls = []
-    cp_flag_list = []
-    rt_mle = []
+    actions = [0]*state_window
+    pnls = [0]*state_window
+    cp_flag_list = [0]*state_window
+    rt_mle = [0]*state_window
 
     # ---- Main evaluation loop ----
     while idx < len(data) - 1:
@@ -86,18 +86,10 @@ def evaluate_lstm_loop(
 
         # --- BOCPD ---
         change_prob = bocpd.update(norm_ret)
-        # Note: In evaluation, bocpd.rt reflects the run length *before* the current update.
-        # To get the run length *after* the update, we might need a different approach or access internal state.
-        # For now, we'll use the rt after update, and check if it reset (rt_now < rt_before_update).
-        # This is a simplified check. A more robust check would store rt_before_update.
-        rt_now = bocpd.rt
-        # Simple check for change point: if rt decreased significantly
-        # This check might need refinement based on BOCPD implementation details.
-        # As a placeholder, we'll use a simple threshold on change_prob
-        cp_flag = 1 if change_prob > 0.5 else 0 # Using change_prob threshold as a proxy
+        rt_mle.append(bocpd.rt)
+        cp_flag = 1 if rt_mle[idx] < rt_mle[idx-1] else 0
         cp_flag_list.append(cp_flag)
-
-
+        
         # --- Build sequence input for encoder ---
         seq_start = max(0, idx - seq_len_for_vae + 1)
         seq_rets = data[seq_start: idx + 1]
