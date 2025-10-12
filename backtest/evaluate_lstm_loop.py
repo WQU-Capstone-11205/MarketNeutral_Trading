@@ -36,7 +36,7 @@ def evaluate_lstm_loop(
     state_dim = state_window
 
     # ---- Load models ----
-    from util.file_operations import load_lstm_models  # adjust path if needed
+    from util.models_io import load_models  # adjust path if needed
     from ml_dl_models.rnn_vae import VAEEncoder
     from ml_dl_models.lstm import LSTMPolicy
 
@@ -45,7 +45,7 @@ def evaluate_lstm_loop(
     opt_vae = optim.Adam(encoder.parameters(), lr=1e-3)
     opt_policy = optim.Adam(policy_lstm.parameters(), lr=1e-4)
 
-    bocpd_cfg, meta = load_lstm_models(model_path, policy_lstm, encoder,
+    bocpd_cfg, meta = load_models(model_path, policy_lstm, encoder,
                     opt_policy, opt_vae,
                     device, step=None)
 
