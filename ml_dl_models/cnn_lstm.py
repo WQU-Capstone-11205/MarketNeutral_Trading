@@ -7,9 +7,9 @@ import torch.nn as nn
 # CNN-LSTM model
 # -------------------------
 class CNNLSTMModel(nn.Module):
-    def __init__(self, input_dim, cnn_channels=32, lstm_hidden=64):
+    def __init__(self, input_dim, cnn_channels=32, lstm_hidden=128, kernel_size=3):
         super().__init__()
-        self.conv = nn.Conv1d(input_dim, cnn_channels, kernel_size=3, padding=1)
+        self.conv = nn.Conv1d(input_dim, cnn_channels, kernel_size=kernel_size, padding=1)
         self.ln = nn.LayerNorm(cnn_channels)
         self.lstm = nn.LSTM(cnn_channels, lstm_hidden, batch_first=True)
         self.fc = nn.Linear(lstm_hidden, 1)
