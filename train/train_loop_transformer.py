@@ -185,5 +185,5 @@ def train_loop_transformer(
 # if __name__ == "__main__":
 #     # dummy_series = pd.Series(np.random.randn(2000),
 #     #                          index=pd.date_range("2020-01-01", periods=2000))
-#     train_loop_Transformer(train_spread, num_epochs = 1)
+#     train_loop_transformer(train_spread, num_epochs = 1)
 #     print("train_loop (Transformer) ran successfully!")
