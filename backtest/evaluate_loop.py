@@ -20,7 +20,7 @@ from ml_dl_models.actor_critic import Critic
 from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.models_io import load_RLmodels
 
-def evaluate_loop(data, last_step, seq_len = 50, total_steps = 100000, load_dir="checkpoints", device="cpu", exploration=False):
+def evaluate_loop(data, seq_len = 50, total_steps = 100000, load_dir="checkpoints", device="cpu", exploration=False):
     state_window = 50
     seq_len_for_vae = 50
     input_dim = 2  # [return, bocpd_prob] per timestep into encoder
@@ -35,7 +35,7 @@ def evaluate_loop(data, last_step, seq_len = 50, total_steps = 100000, load_dir=
     critic_opt = torch.optim.Adam(critic.parameters(), lr=1e-3)
     bocpd_cfg, meta = load_RLmodels(load_dir, actor, critic, vae_encoder,
                                       actor_opt, critic_opt, vae_opt,
-                                      device, step=(last_step-1))
+                                      device)
     
     # Extract the hazard rate from the loaded dictionary
     bocpd_hazard = bocpd_cfg.get("bocpd_hazard", bocpd_hazard_default)
