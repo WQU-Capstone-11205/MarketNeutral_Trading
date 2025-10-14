@@ -124,7 +124,7 @@ def evaluate_loop(data, seq_len = 50, total_steps = 100000, load_dir="checkpoint
     # ---- Final metrics ----
     print(f"Average recon error: {np.mean(all_recons):.6f}")
     print(f"Average change prob: {np.mean(change_probs):.6f}")
-    pnl = np.cumsum(np.array(actions) * np.array(rewards))
+    pnl = np.cumsum(np.array(actions[state_window:]) * np.array(rewards[state_window:))
     plt.plot(pnl, label="RL PnL")
     plt.plot(np.cumsum(np.array(rewards)), label="Buy&Hold")
     plt.legend(); 
