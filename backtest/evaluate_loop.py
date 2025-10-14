@@ -38,7 +38,7 @@ def evaluate_loop(data, seq_len = 50, total_steps = 100000, load_dir="checkpoint
                                       device)
     
     # Extract the hazard rate from the loaded dictionary
-    bocpd_hazard = bocpd_cfg.get("bocpd_hazard", bocpd_hazard_default)
+    bocpd_hazard = bocpd_cfg.get("bocpd_hazard", bocpd_hazard_default=300.0)
     bocpd = BOCPD(ConstantHazard(bocpd_hazard), StudentT(mu=0, kappa=1, alpha=1, beta=1))
     vae_encoder.eval()
     actor.eval()
