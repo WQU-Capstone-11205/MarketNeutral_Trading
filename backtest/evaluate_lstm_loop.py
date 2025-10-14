@@ -8,7 +8,7 @@ import torch.optim as optim
 @torch.no_grad()
 def evaluate_lstm_loop(
     stream,
-    model_path,
+    save_dir="checkpoints_lstm",
     state_window=50,
     seq_len_for_vae=50,
     bocpd_hazard_default=300.0, # Use a default in case it's not in cfg
@@ -45,7 +45,7 @@ def evaluate_lstm_loop(
     opt_vae = optim.Adam(encoder.parameters(), lr=1e-3)
     opt_policy = optim.Adam(policy_lstm.parameters(), lr=1e-4)
 
-    bocpd_cfg, meta = load_models(model_path, policy_lstm, encoder,
+    bocpd_cfg, meta = load_models(save_dir, policy_lstm, encoder,
                     opt_policy, opt_vae,
                     device, step=None)
 
