@@ -130,7 +130,7 @@ def evaluate_lstm_loop(
 
     # ---- Compute performance metrics ----
     pnls = np.array(pnls)
-    cumulative_returns = np.cumsum(pnls)
+    cumulative_returns = np.cumsum(pnls[state_window:])
     mean_ret = np.mean(pnls)
     std_ret = np.std(pnls) + 1e-8
     sharpe = (mean_ret / std_ret) * np.sqrt(252)  # annualized Sharpe (daily freq)
