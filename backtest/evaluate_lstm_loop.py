@@ -37,8 +37,13 @@ def evaluate_lstm_loop(
 
     # ---- Load models ----
     from util.models_io import load_models  # adjust path if needed
+    from util.running_mean_std import RunningMeanStd
     from ml_dl_models.rnn_vae import VAEEncoder
     from ml_dl_models.lstm import LSTMPolicy
+    from structural_break.bocpd import BOCPD
+    from structural_break.hazard import ConstantHazard
+    from structural_break.distribution import StudentT
+
 
     encoder = VAEEncoder(input_dim=input_dim, hidden_dim=128, z_dim=z_dim, seq_len=seq_len_for_vae).to(device)
     policy_lstm = LSTMPolicy(input_dim=state_dim + z_dim, hidden_dim=128).to(device)
@@ -57,7 +62,6 @@ def evaluate_lstm_loop(
     encoder.eval()
     policy_lstm.eval()
     bocpd.reset_params()
-
 
     # ---- Prepare data ----
     if isinstance(stream, pd.Series):
