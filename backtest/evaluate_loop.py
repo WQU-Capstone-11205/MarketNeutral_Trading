@@ -59,8 +59,9 @@ def evaluate_loop(data, seq_len = 50, total_steps = 100000, load_dir="checkpoint
     last_action = 0.0
 
     # action noise base sigma
-    change_probs, rewards = [], []
+    change_probs = []
     all_recons = [0]*state_window
+    rewards = [0]*state_window
     actions = [0]*state_window
 
     # for i in range(len(data_n) - seq_len):
@@ -118,7 +119,7 @@ def evaluate_loop(data, seq_len = 50, total_steps = 100000, load_dir="checkpoint
 
         idx += 1    
 
-    actions.append(0)
+    #actions.append(0)
     all_recons.append(all_recons[-1])
     # ---- Final metrics ----
     print(f"Average recon error: {np.mean(all_recons):.6f}")
