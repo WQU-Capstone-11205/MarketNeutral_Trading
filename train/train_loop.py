@@ -181,7 +181,7 @@ def train_loop(
             bocpd_cfg = {"bocpd_hazard": bocpd_hazard}
             save_RLmodels(save_dir, actor, critic, encoder,
                             actor_opt, critic_opt, opt_vae,
-                            bocpd_cfg, meta, step=epoch)
+                            bocpd_cfg, meta)
 
     np.savez(os.path.join(save_dir, "rms_stats.npz"), mean=rms.mean, var=rms.var)
     print("Training complete.")
