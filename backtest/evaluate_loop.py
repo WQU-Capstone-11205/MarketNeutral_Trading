@@ -122,11 +122,11 @@ def evaluate_loop(data, last_step, seq_len = 50, total_steps = 100000, load_dir=
     # ---- Final metrics ----
     print(f"Average recon error: {np.mean(all_recons):.6f}")
     print(f"Average change prob: {np.mean(change_probs):.6f}")
-    # pnl = np.cumsum(np.array(actions) * np.array(rewards))
-    # plt.plot(pnl, label="RL PnL")
-    # plt.plot(np.cumsum(np.array(rewards)), label="Buy&Hold")
-    # plt.legend(); 
-    # plt.title("PnL vs Buy&Hold")
-    # plt.show()
+    pnl = np.cumsum(np.array(actions) * np.array(rewards))
+    plt.plot(pnl, label="RL PnL")
+    plt.plot(np.cumsum(np.array(rewards)), label="Buy&Hold")
+    plt.legend(); 
+    plt.title("PnL vs Buy&Hold")
+    plt.show()
     print("Evaluation complete.")
     return actions, all_recons
