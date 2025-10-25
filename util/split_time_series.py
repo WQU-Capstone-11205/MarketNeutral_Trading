@@ -1,6 +1,6 @@
 import numpy as np
 
-def split_time_series(data, train_ratio=0.7, val_ratio=0.15):
+def split_time_series(data, train_ratio=0.7, val_ratio=0.0):
     """
     Split data into train, validation, and test sets.
     Assumes data is a pandas series.
@@ -14,4 +14,7 @@ def split_time_series(data, train_ratio=0.7, val_ratio=0.15):
     val_data = data[train_end:val_end]
     test_data = data[val_end:]
 
-    return train_data, val_data, test_data
+    if val_ratio > 0.0:
+        return train_data, val_data, test_data
+    else:
+        return train_data, test_data
