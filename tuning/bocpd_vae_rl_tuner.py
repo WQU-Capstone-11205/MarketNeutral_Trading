@@ -31,18 +31,18 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
     }
 
     best_rl_params = {
-        "state_dim": [16],
-        "action_dim": [1],
-        "hidden_dim": [128], #64
-        "lr": [1e-5]
+        "state_dim": 16,
+        "action_dim": 1,
+        "hidden_dim": 128, #64
+        "lr": 1e-5
     }
 
     best_joint_params = {
-        "state_window": [50],
-        "base_action_sigma": [0.3],
-        "wt_multplier": [1.5],
-        "buffer_size_updates": [256],
-        "sample_batch_size": [128]
+        "state_window": 50,
+        "base_action_sigma": 0.3,
+        "wt_multplier": 1.5,
+        "buffer_size_updates": 256,
+        "sample_batch_size": 128
     }
 
     def __init__(self, custom_bocpd_space: Dict[str, List[Any]]=None,
