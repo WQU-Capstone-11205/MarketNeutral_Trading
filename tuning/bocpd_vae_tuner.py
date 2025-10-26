@@ -1,16 +1,12 @@
 import numpy as np
+from typing import Dict, List, Any
+from itertools import product
+
 from util.running_mean_std import RunningMeanStd
-from util.metrics import evaluate_composite_score
 from structural_break.bocpd import BOCPD
 from structural_break.hazard import ConstantHazard
 from structural_break.distribution import StudentT
 from ml_dl_models.rnn_vae import VAEEncoder, vae_loss
-from ml_dl_models.actor_critic import Actor
-from ml_dl_models.actor_critic import Critic
-from util.weighted_replay_buffer import WeightedReplayBuffer
-
-from typing import Dict, List, Any
-from itertools import product
 
 # ------------------------------------------------------------
 # Hyperparameter tuning class
