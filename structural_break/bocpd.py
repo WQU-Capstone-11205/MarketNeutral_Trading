@@ -16,6 +16,9 @@ class BOCPD:
         self.T = 0
         self.beliefs = np.zeros((1, 2))
         self.beliefs[0, 0] = 1.0
+        self.change_probs = []
+        self.cp_flags = []
+        self.rt_mle = []
 
     def reset_params(self):
         self.T = 0
@@ -44,7 +47,6 @@ class BOCPD:
 
         # Calculate Changepoint Probabilities (5 in Algorithm 1)
         self.beliefs[0, 1] = (self.beliefs[: self.T + 1, 0] * pi_t * h).sum()
-        cp_prob = self.beliefs[0, 1]
 
         # Determine Run length Distribution (7 in Algorithm 1)
         self.beliefs[:, 1] = self.beliefs[:, 1] / self.beliefs[:, 1].sum()
@@ -55,7 +57,19 @@ class BOCPD:
         # Update internal state
         self._shift_belief_matrix()
         self.T += 1
-        return cp_prob
+
+        # Update results
+        curr_rt = self.rt[0]
+        cp_flag = 1 if ((len(self.rt_mle) > 0) and (curr_rt < self.rt_mle[-1])) else 0
+        self.cp_flags.append(cp_flag)
+        self.rt_mle.append(curr_rt)
+        change_prob = self.beliefs.T[0][curr_rt]
+        self.change_probs.append(self.beliefs.T[0][curr_rt])
+        return change_prob
+
+    @property
+    def results(self):
+        return self.change_probs, self.rt_mle, self.cp_flags
 
     @property
     def rt(self):
