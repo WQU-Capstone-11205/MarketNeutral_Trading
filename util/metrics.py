@@ -1,4 +1,6 @@
-def compute_max_drawdown(self, equity_curve):
+import numpy as np
+
+def compute_max_drawdown(equity_curve):
       equity_curve = np.asarray(equity_curve)
       if len(equity_curve) < 2:
           return 0.0
@@ -11,7 +13,7 @@ def compute_max_drawdown(self, equity_curve):
       mdd = np.max(drawdowns)
       return mdd
 
-def evaluate_composite_score(self, trades, cost_per_trade, freq_per_year=252):
+def evaluate_composite_score(trades, cost_per_trade, freq_per_year=252):
       """
       trades: realized returns (after the agent’s actions).
       cost_per_trade: proportional transaction cost (e.g., 0.001 for 10 bps).
@@ -27,7 +29,7 @@ def evaluate_composite_score(self, trades, cost_per_trade, freq_per_year=252):
       sharpe = np.sqrt(freq_per_year) * mean_r / (std_r + 1e-8)
       
       # max drawdown, which is equivalent to risk
-      max_dd = self.compute_max_drawdown(np.cumsum(r))
+      max_dd = compute_max_drawdown(np.cumsum(r))
       
       # adaptive cost penalty
       total_cost = np.sum(np.abs(trades)) * cost_per_trade
