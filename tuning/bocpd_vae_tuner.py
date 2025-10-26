@@ -46,20 +46,20 @@ class BOCPD_VAE_Tuner:
     # }
 
     best_bocpd_params = {
-        "hazard": [50],
-        "mu": [0],
-        "kappa": [10.0],
-        "alpha": [10.0],
-        "beta": [10.0]
+        "hazard": 50,
+        "mu": 0,
+        "kappa": 10.0,
+        "alpha": 10.0,
+        "beta": 10.0
     }
 
     best_vae_params = {
-        "input_dim": [2],
-        "latent_dim": [16],
-        "hidden_dim": [256],
-        "lr": [1e-3], #, 1e-4
-        "vae_seq_len": [1],
-        "kl_wt": [0.01]
+        "input_dim": 2,
+        "latent_dim": 16,
+        "hidden_dim": 256,
+        "lr": 1e-3, #, 1e-4
+        "vae_seq_len": 1,
+        "kl_wt": 0.01
     }
 
     def __init__(self, custom_bocpd_space: Dict[str, List[Any]]=None,
