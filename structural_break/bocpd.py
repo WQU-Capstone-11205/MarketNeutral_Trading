@@ -65,7 +65,7 @@ class BOCPD:
         self.rt_mle.append(curr_rt)
         change_prob = self.beliefs.T[0][curr_rt]
         self.change_probs.append(self.beliefs.T[0][curr_rt])
-        return change_prob
+        return change_prob, cp_flag
 
     @property
     def results(self):
