@@ -17,7 +17,7 @@ def evaluate_strategy(pnl_series, risk_free_rate=0.0, freq=252):
     std_ret = np.std(pnl_series) + 1e-8
 
     # Annualized Sharpe Ratio
-    sharpe = (mean_ret - risk_free_rate) / std_ret * np.sqrt(freq)
+    sharpe = ((mean_ret - risk_free_rate) / std_ret) * np.sqrt(freq)
     
     return {
         "total_return": total_return,
