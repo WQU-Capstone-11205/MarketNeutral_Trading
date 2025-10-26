@@ -16,7 +16,10 @@ def save_RLmodels(save_dir, actor, critic, vae_encoder,
     torch.save(vae_opt.state_dict(), os.path.join(save_dir, f"vae_opt{tag}.pth"))
     with open(os.path.join(save_dir, f"bocpd_cfg{tag}.json"), "w") as f: json.dump(bocpd_cfg, f)
     with open(os.path.join(save_dir, f"meta{tag}.json"), "w") as f: json.dump(meta, f)
-    print(f"Saved all models + optimizers at step {step}")
+    if step == None:
+        print(f"Saved all models + optimizers")
+    else:
+        print(f"Saved all models + optimizers at step {step}")
 
 
 def load_RLmodels(load_dir, actor, critic, vae_encoder,
@@ -32,7 +35,10 @@ def load_RLmodels(load_dir, actor, critic, vae_encoder,
 
     with open(os.path.join(load_dir, f"bocpd_cfg{tag}.json")) as f: bocpd_cfg = json.load(f)
     with open(os.path.join(load_dir, f"meta{tag}.json")) as f: meta = json.load(f)
-    print(f"Loaded models/opts at step {step}")
+    if step == None:
+        print(f"Loaded models/opts")
+    else:
+        print(f"Loaded models/opts at step {step}")
     return bocpd_cfg, meta
 
 def save_models(save_dir, model, vae_encoder,
@@ -47,7 +53,10 @@ def save_models(save_dir, model, vae_encoder,
     torch.save(vae_opt.state_dict(), os.path.join(save_dir, f"vae_opt{tag}.pth"))
     with open(os.path.join(save_dir, f"bocpd_cfg{tag}.json"), "w") as f: json.dump(bocpd_cfg, f)
     with open(os.path.join(save_dir, f"meta{tag}.json"), "w") as f: json.dump(meta, f)
-    print(f"Saved all models + optimizers at step {step}")
+    if step == None:
+        print(f"Saved all models + optimizers")
+    else:
+        print(f"Saved all models + optimizers at step {step}")
 
 
 def load_models(load_dir, model, vae_encoder,
@@ -61,5 +70,8 @@ def load_models(load_dir, model, vae_encoder,
 
     with open(os.path.join(load_dir, f"bocpd_cfg{tag}.json")) as f: bocpd_cfg = json.load(f)
     with open(os.path.join(load_dir, f"meta{tag}.json")) as f: meta = json.load(f)
-    print(f"Loaded models/opts at step {step}")
+    if step == None:
+        print(f"Loaded models/opts")
+    else:
+        print(f"Loaded models/opts at step {step}")
     return bocpd_cfg, meta
