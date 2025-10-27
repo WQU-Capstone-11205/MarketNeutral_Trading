@@ -128,6 +128,7 @@ class BOCPD_VAE_Tuner:
                 seq_start = max(0, i - seq_len_vae + 1)
                 seq_rets = data[seq_start: i + 1]
                 seq_diff = np.diff(seq_rets, prepend=seq_rets[0])
+                seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
                 # pad if needed
                 if len(seq_rets) < seq_len_vae:
                     pad = np.zeros(seq_len_vae - len(seq_rets))
