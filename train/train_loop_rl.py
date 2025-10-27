@@ -106,13 +106,16 @@ def train_loop_rl(
             # build encoder input sequence (seq_len_for_vae)
             seq_start = max(0, step - seq_len_for_vae + 1)
             seq_rets = data[seq_start: step + 1]
+            seq_diff = np.diff(seq_rets, prepend=data[0])
+            seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
             # pad if needed
             if len(seq_rets) < seq_len_for_vae:
                 pad = np.zeros(seq_len_for_vae - len(seq_rets))
                 seq_rets = np.concatenate([pad, seq_rets])
-            # form encoder input: (seq_len, input_dim) where input_dim = [norm_ret, change_prob]
-            seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8),
-                                  np.ones_like(seq_rets) * change_prob ], axis=-1)[None, ...]  # batch=1
+                seq_diff = np.concatenate([pad, seq_diff])
+            # form encoder input: (seq_len, seq_diff, input_dim) where input_dim = [norm_ret, seq_diff, change_prob]
+            seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8), seq_diff,
+                                  np.ones_like(seq_rets) * change_prob ], axis=-1)[None, ...]  # batch=1 # (1, seq_len_for_vae, 3)
             seq_inp_t = torch.tensor(seq_inp, dtype=torch.float32).to(device)
             # # --- VAE encoder ---
             x_hat, mu, logvar, z_t = encoder(seq_inp_t)
@@ -140,16 +143,18 @@ def train_loop_rl(
             noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob)  # alpha=5 scaling
             action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
             action = np.clip(action, -1.0, 1.0)
-            actions_pnl.append(action)
+            # risk-adjusted position scaling
+            position = action * (1 - change_prob) / (math.sqrt(rms.var) + 1e-8)
+            actions_pnl.append(position)
             # interpret action: e.g., fraction of capital to long (positive) or short (negative)
-            # reward: simple PnL = action * next_return
+            # reward: simple PnL = position × Δspread
             next_ret = data[step + 1]
-            reward = float(action * next_ret)
+            reward = float(position * (next_ret - cur_ret))
 
             # store transition in buffer with initial weight 1.0
             buffer.push(
                 state_norm.astype(np.float32),
-                action.astype(np.float32),
+                position.astype(np.float32),
                 reward,
                 None, False,
                 1.0,
