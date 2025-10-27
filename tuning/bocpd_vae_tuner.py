@@ -27,7 +27,7 @@ class BOCPD_VAE_Tuner:
 
     #This is a bit concise form to get the best score
     default_vae_space = {
-        "input_dim": [2],
+        "input_dim": [3],
         "latent_dim": [16],
         "hidden_dim": [128, 256],
         "lr": [1e-2, 1e-3],
@@ -37,7 +37,7 @@ class BOCPD_VAE_Tuner:
 
     # We ran this to get the best score (for 2 hours)
     # default_vae_space = {
-    #     "input_dim": [2],
+    #     "input_dim": [3],
     #     "latent_dim": [16, 32],
     #     "hidden_dim": [128, 256],
     #     "lr": [1e-2, 1e-3],
@@ -54,7 +54,7 @@ class BOCPD_VAE_Tuner:
     }
 
     best_vae_params = {
-        "input_dim": 2,
+        "input_dim": 3,
         "latent_dim": 16,
         "hidden_dim": 256,
         "lr": 1e-3, #, 1e-4
@@ -127,12 +127,14 @@ class BOCPD_VAE_Tuner:
                 # build encoder input sequence (seq_len_for_vae)
                 seq_start = max(0, i - seq_len_vae + 1)
                 seq_rets = data[seq_start: i + 1]
+                seq_diff = np.diff(seq_rets, prepend=seq_rets[0])
                 # pad if needed
                 if len(seq_rets) < seq_len_vae:
                     pad = np.zeros(seq_len_vae - len(seq_rets))
                     seq_rets = np.concatenate([pad, seq_rets])
-                # form encoder input: (seq_len, input_dim) where input_dim = [norm_ret, change_prob]
-                seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8),
+                    seq_diff = np.concatenate([pad, seq_diff])
+                # form encoder input: (seq_len, input_dim) where input_dim = [norm_ret, seq_diff, change_prob]
+                seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8), seq_diff,
                                       np.ones_like(seq_rets) * change_prob ], axis=-1)[None, ...]  # batch=1
                 seq_inp_t = torch.tensor(seq_inp, dtype=torch.float32).to(device)
 
