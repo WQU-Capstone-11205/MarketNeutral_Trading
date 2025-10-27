@@ -98,7 +98,7 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
                 action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
                 action = np.clip(action, -1.0, 1.0)
                 # risk-adjusted position scaling
-                position = action * (1 - change_prob) / (math.sqrt(rms.var) + 1e-8)
+                position = action * (1 - change_probs[i]) / (math.sqrt(rms.var) + 1e-8)
                 next_ret = data.iloc[i + 1] # Use iloc for pandas Series
                 reward = float(position * (next_ret - data.iloc[i]))
                 trades.append(reward)
