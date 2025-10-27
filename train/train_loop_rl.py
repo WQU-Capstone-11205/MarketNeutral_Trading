@@ -106,7 +106,7 @@ def train_loop_rl(
             # build encoder input sequence (seq_len_for_vae)
             seq_start = max(0, step - seq_len_for_vae + 1)
             seq_rets = data[seq_start: step + 1]
-            seq_diff = np.diff(seq_rets, prepend=data[0])
+            seq_diff = np.diff(seq_rets, prepend=seq_rets[0])
             seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
             # pad if needed
             if len(seq_rets) < seq_len_for_vae:
