@@ -120,7 +120,7 @@ class BOCPD_VAE_Tuner:
             total_recon_loss = 0.0
             total_kl_loss = 0.0
             total_vae_loss = 0.0
-            state_returns = [0.0]*seq_len_vae
+            state_returns = np.array([0.0]*seq_len_vae)
             for i in range(len(data)):
                 seq_ret = data.iloc[i] # Use iloc for pandas Series
                 rms.update([seq_ret])
