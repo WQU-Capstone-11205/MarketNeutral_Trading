@@ -21,7 +21,7 @@ from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.eval_strategy import evaluate_strategy
 from util.models_io import save_RLmodels
 
-def train_rl_loop(
+def train_loop_rl(
     stream,
     bocpd_params=None,
     vae_params=None,
