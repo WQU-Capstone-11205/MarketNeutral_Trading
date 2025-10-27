@@ -27,7 +27,7 @@ def train_loop_rl(
     vae_params=None,
     rl_params=None,
     joint_params=None,
-    num_epochs=25,
+    num_epochs=10,
     save_dir="checkpoints",
     total_steps=10000,
     device='cpu'
