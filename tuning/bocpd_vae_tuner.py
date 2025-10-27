@@ -120,6 +120,7 @@ class BOCPD_VAE_Tuner:
             total_recon_loss = 0.0
             total_kl_loss = 0.0
             total_vae_loss = 0.0
+            state_returns = [0.0]*seq_len_vae
             for i in range(len(data)):
                 seq_ret = data.iloc[i] # Use iloc for pandas Series
                 rms.update([seq_ret])
@@ -127,13 +128,17 @@ class BOCPD_VAE_Tuner:
                 # build encoder input sequence (seq_len_for_vae)
                 seq_start = max(0, i - seq_len_vae + 1)
                 seq_rets = data[seq_start: i + 1]
-                seq_diff = np.diff(seq_rets, prepend=seq_rets[0])
+                if i == 0:
+                    cur_ret = data.iloc[i]
+                else:
+                    cur_ret = data.iloc[i] - data.iloc[i-1]
+                state_returns.append(cur_ret)
+                seq_diff = state_returns[-seq_len_vae:]
                 seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
                 # pad if needed
                 if len(seq_rets) < seq_len_vae:
                     pad = np.zeros(seq_len_vae - len(seq_rets))
                     seq_rets = np.concatenate([pad, seq_rets])
-                    seq_diff = np.concatenate([pad, seq_diff])
                 # form encoder input: (seq_len, input_dim) where input_dim = [norm_ret, seq_diff, change_prob]
                 seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8), seq_diff,
                                       np.ones_like(seq_rets) * change_prob ], axis=-1)[None, ...]  # batch=1
