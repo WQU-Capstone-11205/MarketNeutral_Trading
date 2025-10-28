@@ -19,15 +19,15 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         "state_dim": [16],
         "action_dim": [1],
         "hidden_dim": [64, 128, 256, 512],
-        "lr": [1e-4, 5e-5, 1e-5, 5e-6, 1e-6]
+        "lr": [1e-4, 5e-5, 1e-5, 5e-6]
     }
 
     default_joint_space = {
-        "state_window": [25, 50, 100, 200],
-        "base_action_sigma": [0.01, 0.1, 0.3, 0.5, 0.7],
-        "wt_multplier": [1.5, 1.8, 2.0, 5.0],
-        "buffer_size_updates": [16, 64, 128, 256, 512],
-        "sample_batch_size": [8, 16, 64, 128, 256]
+        "state_window": [25, 50, 100],
+        "base_action_sigma": [0.01, 0.1, 0.3],
+        "wt_multplier": [1.5, 1.8, 2.0],
+        "buffer_size_updates": [16, 64, 128, 256],
+        "sample_batch_size": [8, 16, 64, 128]
     }
 
     best_rl_params = {
@@ -98,11 +98,12 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
                 action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
                 action = np.clip(action, -1.0, 1.0)
                 # risk-adjusted position scaling
-                position = action * (1 - change_probs[i]) / (math.sqrt(rms.var) + 1e-8)
+                #position = action * (1 - change_probs[i]) / (math.sqrt(rms.var) + 1e-8)
                 next_ret = data.iloc[i + 1] # Use iloc for pandas Series
-                reward = float(position * (next_ret - data.iloc[i]))
+                #reward = float(position * (next_ret - data.iloc[i]))
+                reward = float(action * next_ret)
                 trades.append(reward)
-                            # store transition in buffer with initial weight 1.0
+                # store transition in buffer with initial weight 1.0
                 buffer.push(
                     state_norm.astype(np.float32),
                     action.astype(np.float32),
