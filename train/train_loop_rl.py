@@ -77,11 +77,11 @@ def train_loop_rl(
     actor_opt = optim.Adam(actor.parameters(), lr=rl_params['lr'])
     critic_opt = optim.Adam(critic.parameters(), lr=rl_params['lr'])
     opt_vae = optim.Adam(encoder.parameters(), lr=vae_params['lr'])
-    buffer = WeightedReplayBuffer(capacity=30000)
     best_val_sharpe = -np.inf
 
     # training loop
     for epoch in range(num_epochs):
+        buffer = WeightedReplayBuffer(capacity=30000)
         rms = RunningMeanStd()
         # action noise base sigma
         base_action_sigma = joint_params['base_action_sigma']
@@ -91,6 +91,7 @@ def train_loop_rl(
         # initialize state: last `state_window` returns
         state_returns = [0.0]*(state_window-1)
         state_returns.append(data[0])
+        vae_state_diff = np.array([0.0]*seq_len_for_vae)
         last_action = 0.0
         out_recon = []
         actions_pnl = []
@@ -106,13 +107,17 @@ def train_loop_rl(
             # build encoder input sequence (seq_len_for_vae)
             seq_start = max(0, step - seq_len_for_vae + 1)
             seq_rets = data[seq_start: step + 1]
-            seq_diff = np.diff(seq_rets, prepend=seq_rets[0])
-            seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
+            if step == 0:
+                cur_dif = data[step]
+            else:
+                cur_dif = data[step] - data[step-1]
+            vae_state_diff = np.append(vae_state_diff, cur_dif)
+            seq_diff = vae_state_diff[-seq_len_for_vae:]
+            #seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
             # pad if needed
             if len(seq_rets) < seq_len_for_vae:
                 pad = np.zeros(seq_len_for_vae - len(seq_rets))
                 seq_rets = np.concatenate([pad, seq_rets])
-                seq_diff = np.concatenate([pad, seq_diff])
             # form encoder input: (seq_len, seq_diff, input_dim) where input_dim = [norm_ret, seq_diff, change_prob]
             seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8), seq_diff,
                                   np.ones_like(seq_rets) * change_prob ], axis=-1)[None, ...]  # batch=1 # (1, seq_len_for_vae, 3)
@@ -144,17 +149,17 @@ def train_loop_rl(
             action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
             action = np.clip(action, -1.0, 1.0)
             # risk-adjusted position scaling
-            position = action * (1 - change_prob) / (math.sqrt(rms.var) + 1e-8)
-            actions_pnl.append(position)
+            #position = action * (1 - change_prob) / (math.sqrt(rms.var) + 1e-8)
+            actions_pnl.append(action)
             # interpret action: e.g., fraction of capital to long (positive) or short (negative)
             # reward: simple PnL = position × Δspread
             next_ret = data[step + 1]
-            reward = float(position * (next_ret - cur_ret))
+            reward = float(action * (next_ret - cur_ret))
 
             # store transition in buffer with initial weight 1.0
             buffer.push(
                 state_norm.astype(np.float32),
-                position.astype(np.float32),
+                action.astype(np.float32),
                 reward,
                 None, False,
                 1.0,
@@ -207,7 +212,7 @@ def train_loop_rl(
         val_metrics = evaluate_strategy(actions_pnl)
         val_sharpe = val_metrics["sharpe_ratio"]
 
-        print(f"Val Sharpe={val_sharpe:.3f}")
+        print(f"Sharpe ={val_sharpe:.3f}")
 
         # --- save best checkpoint ---
         if val_sharpe > best_val_sharpe:
