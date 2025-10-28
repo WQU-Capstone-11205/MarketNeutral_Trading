@@ -18,7 +18,7 @@ from ml_dl_models.rnn_vae import VAEEncoder, vae_loss
 # ------------------------------------------------------------
 class BOCPD_VAE_Tuner:
     default_bocpd_space = {
-        "hazard": [50, 100, 250, 300],
+        "hazard": [50, 100, 250],
         "mu": [0, 1, 2],
         "kappa": [0.1, 1.0, 10.0],
         "alpha": [0.1, 1.0, 10.0],
@@ -134,7 +134,7 @@ class BOCPD_VAE_Tuner:
                     cur_ret = data.iloc[i] - data.iloc[i-1]
                 state_returns = np.append(state_returns, cur_ret)
                 seq_diff = state_returns[-seq_len_vae:]
-                seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
+                #seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
                 # pad if needed
                 if len(seq_rets) < seq_len_vae:
                     pad = np.zeros(seq_len_vae - len(seq_rets))
