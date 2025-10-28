@@ -1,5 +1,11 @@
 import numpy as np
 
+def sharpe_ratio(returns, risk_free_rate=0.0, periods_per_year=252):
+    excess_returns = returns - risk_free_rate
+    mean = np.mean(excess_returns)
+    std = np.std(excess_returns) + 1e-8
+    return (mean / std) * np.sqrt(periods_per_year)
+      
 def compute_max_drawdown(equity_curve):
       equity_curve = np.asarray(equity_curve)
       if len(equity_curve) < 2:
