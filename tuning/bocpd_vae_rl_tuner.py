@@ -64,7 +64,7 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         self.best_rl_params = BOCPD_VAE_RL_Tuner.best_rl_params.copy()
         self.best_joint_params = BOCPD_VAE_RL_Tuner.best_joint_params.copy()
 
-    def tune_rl(self, data, change_probs, cpflags, z_t):
+    def tune_rl(self, data, change_probs, cpflags, z_ts):
         # initialize random seed
         np.random.seed(42)
         random.seed(42)
@@ -91,7 +91,7 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
 
                 state_t = torch.tensor(state_norm.astype(np.float32))[None, :].to(device)
                 with torch.no_grad():
-                    z_t_det = z_t
+                    z_t_det = z_ts[i]
                     action_mean = actor(state_t, z_t_det).cpu().numpy().squeeze()
                 # exploration scale increases with change_prob
                 noise_sigma = base_action_sigma * (1.0 + 5.0 * change_probs[i])  # alpha=5 scaling, cp is now 1D
@@ -149,7 +149,7 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         self.best_rl_params = best_params
         return best_params, best_score
 
-    def joint_tuning(self, data, best_rl_params, change_probs, cpflags, z_t):
+    def joint_tuning(self, data, best_rl_params, change_probs, cpflags, z_ts):
         # initialize random seed
         np.random.seed(42)
         random.seed(42)
@@ -177,7 +177,7 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
 
                 state_t = torch.tensor(state_norm.astype(np.float32))[None, :].to(device)
                 with torch.no_grad():
-                    z_t_det = z_t
+                    z_t_det = z_ts[i]
                     action_mean = actor(state_t, z_t_det).cpu().numpy().squeeze()
                 # exploration scale increases with change_prob
                 noise_sigma = base_action_sigma * (1.0 + 5.0 * change_probs[i])  # alpha=5 scaling, cp is now 1D
@@ -238,15 +238,15 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         print(f"Best BOCPD parameters: {best_bocpd_params}")
         print(f"Best BOCPD score: {round(best_bocpd_score,3)}")
 
-        best_vae_params, best_vae_core, z_t = self.tune_vae(data, cps)
+        best_vae_params, best_vae_core, z_ts = self.tune_vae(data, cps)
         print(f"Best vae parameters: {best_vae_params}")
         print(f"Best vae score: {round(best_vae_core,4)}")
 
-        best_rl_params, best_rl_score = self.tune_rl(data, cps, cpflags, z_t)
+        best_rl_params, best_rl_score = self.tune_rl(data, cps, cpflags, z_ts)
         print(f"Best RL parameters: {best_rl_params}")
         print(f"Best RL score: {round(best_rl_score,4)}")
 
-        best_joint_tuning_params, best_joint_tuning_score = self.joint_tuning(data, best_rl_params, cps, cpflags, z_t)
+        best_joint_tuning_params, best_joint_tuning_score = self.joint_tuning(data, best_rl_params, cps, cpflags, z_ts)
         print(f"Best Joint Tuning parameters: {best_joint_tuning_params}")
         print(f"Best Joint Tuning score: {round(best_joint_tuning_score,4)}")
 
