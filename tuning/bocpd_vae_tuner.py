@@ -110,7 +110,7 @@ class BOCPD_VAE_Tuner:
         random.seed(42)
         torch.manual_seed(42)
         best_score, best_params = -np.inf, None
-        best_z_t = None
+        best_z_ts = None
         for params in self._grid(self.vae_space):
             device = 'cpu'
             seq_len_vae = params['vae_seq_len']
@@ -121,6 +121,7 @@ class BOCPD_VAE_Tuner:
             total_kl_loss = 0.0
             total_vae_loss = 0.0
             state_returns = np.array([0.0]*seq_len_vae)
+            z_ts = []
             for i in range(len(data)):
                 seq_ret = data.iloc[i] # Use iloc for pandas Series
                 rms.update([seq_ret])
@@ -146,6 +147,7 @@ class BOCPD_VAE_Tuner:
 
                 # # --- VAE encoder ---
                 x_hat, mu, logvar, z_t = encoder(seq_inp_t)
+                z_ts.append(z_t)
                 loss_vae, recon_loss, kl_loss = vae_loss(seq_inp_t, x_hat, mu, logvar, kl_weight=params['kl_wt'])
                 opt_vae.zero_grad(); loss_vae.backward(); opt_vae.step()
                 total_recon_loss += recon_loss
@@ -156,10 +158,10 @@ class BOCPD_VAE_Tuner:
             print(f'vae score = {round(score,4)} :: params = {params}')
             if score > best_score:
                 best_score, best_params = score, params
-                best_z_t = z_t
+                best_z_ts = z_ts
 
         self.best_vae_params = best_params
-        return best_params, best_score, best_z_t
+        return best_params, best_score, best_z_ts
 
     def _grid(self, space_dict):
         keys = list(space_dict.keys())
