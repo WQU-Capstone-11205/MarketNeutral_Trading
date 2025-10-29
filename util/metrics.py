@@ -1,11 +1,28 @@
 import numpy as np
+from sklearn.linear_model import LinearRegression
+
+def alpha_beta(strategy_returns, benchmark_returns, freq=252):
+    X = benchmark_returns.reshape(-1, 1)
+    y = strategy_returns
+    reg = LinearRegression().fit(X, y)
+    beta = reg.coef_[0]
+    alpha = (reg.intercept_) * freq  # annualized
+    return alpha, beta
+
+def annual_volatility(returns, freq=252):
+    return np.std(returns) * np.sqrt(freq)
 
 def sharpe_ratio(returns, risk_free_rate=0.0, periods_per_year=252):
     excess_returns = returns - risk_free_rate
     mean = np.mean(excess_returns)
     std = np.std(excess_returns) + 1e-8
     return (mean / std) * np.sqrt(periods_per_year)
-      
+
+def sortino_ratio(returns, freq=252):
+    mean_ret = np.mean(returns)
+    downside = np.std(returns[returns < 0])
+    return (mean_ret / downside) * np.sqrt(freq)
+    
 def compute_max_drawdown(equity_curve):
       equity_curve = np.asarray(equity_curve)
       if len(equity_curve) < 2:
