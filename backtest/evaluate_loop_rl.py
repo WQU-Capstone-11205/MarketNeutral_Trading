@@ -170,11 +170,11 @@ def evaluate_loop_rl(
     all_recons.append(all_recons[-1])
     print("Evaluation complete.")
     metrics = { 
-                'change_probs' : change_probs, 
-                'rt_mle' : rt_mle, 
-                'cp_flags' : cp_flags, 
-                'recons' : all_recons, 
-                'pnl' : pnl 
+                'change_probs' : np.array(change_probs), 
+                'rt_mle' : np.array(rt_mle), 
+                'cp_flags' : np.array(cp_flags), 
+                'recons' : np.array(all_recons), 
+                'pnl' : np.array(pnl) 
     }
     return metrics
     return actions, all_recons, rewards
