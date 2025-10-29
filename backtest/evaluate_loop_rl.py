@@ -96,6 +96,8 @@ def evaluate_loop_rl(
     all_recons = []
     rewards = []
     actions = []
+    pnl = []
+    capital = 1.0
 
     # for i in range(len(data_n) - seq_len):
     for step in trange(T):
@@ -158,6 +160,8 @@ def evaluate_loop_rl(
         reward = action * (next_ret - cur_ret)
         #reward = float(action * next_ret)
         rewards.append(reward)
+        capital *= (1 + reward)
+        pnl.append(capital)
         #all_recons.append(torch.mean((x_hat - seq_inp_t) ** 2).item())
 
         state_returns.append(data[step+1])
@@ -170,8 +174,7 @@ def evaluate_loop_rl(
                 'rt_mle' : rt_mle, 
                 'cp_flags' : cp_flags, 
                 'recons' : all_recons, 
-                'rewards' : rewards, 
-                'actions' : actions
+                'pnl' : pnl 
     }
     return metrics
     return actions, all_recons, rewards
