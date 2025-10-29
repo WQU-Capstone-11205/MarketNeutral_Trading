@@ -1,8 +1,17 @@
 import numpy as np
 from sklearn.linear_model import LinearRegression
+import pandas as pd
 
 def alpha_beta(strategy_returns, benchmark_returns, freq=252):
+    # Convert pandas Series to numpy arrays if they are not already
+    if isinstance(benchmark_returns, pd.Series):
+        benchmark_returns = benchmark_returns.values
+    if isinstance(strategy_returns, pd.Series):
+        strategy_returns = strategy_returns.values
+
+    sz = len(benchmark_returns)
     X = benchmark_returns.reshape(-1, 1)
+    X = X[:sz-1]
     y = strategy_returns
     reg = LinearRegression().fit(X, y)
     beta = reg.coef_[0]
