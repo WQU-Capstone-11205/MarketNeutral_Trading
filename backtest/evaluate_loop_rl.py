@@ -177,4 +177,3 @@ def evaluate_loop_rl(
                 'pnl' : np.array(pnl) 
     }
     return metrics
-    return actions, all_recons, rewards
