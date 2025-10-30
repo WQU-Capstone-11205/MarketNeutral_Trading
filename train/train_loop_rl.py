@@ -142,7 +142,7 @@ def train_loop_rl(
 
             state_t = torch.tensor(state_norm.astype(np.float32))[None, :].to(device)
             with torch.no_grad():
-                z_t_det = mu # z_t
+                z_t_det = mu.detach() # z_t
                 action_mean = actor(state_t, z_t_det).cpu().numpy().squeeze()
             # exploration scale increases with change_prob
             noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob)  # alpha=5 scaling
