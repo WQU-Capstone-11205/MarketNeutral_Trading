@@ -20,128 +20,193 @@ from util.models_io import save_models
 
 def train_loop_lstm(
     stream,
-    num_epochs = 50,
+    bocpd_params=None,
+    vae_params=None,
+    lstm_params=None,
+    joint_params=None,
+    num_epochs = 10,
     save_dir="checkpoints_lstm",
-    state_window=50,
-    seq_len_for_vae=50,
     total_steps=10000,
-    bocpd_hazard=300.0,
-    gamma=0.99,                # discount factor (same as RL)
-    transaction_cost=0.0005,   # optional, small transaction cost per trade
     device='cpu'
 ):
+    gamma = 1 # disabled for now # 0.99,                # discount factor (same as RL)
+    transaction_cost = 0 # disabled for now #0.0005,   # optional, small transaction cost per trade
+    replay_alpha_cp = 0.6      # weight mix: alpha*cp + (1-alpha)*|reward|
+    state_window=joint_params['state_window']
+    seq_len_for_vae=vae_params['vae_seq_len']
+    bocpd_hazard=bocpd_params['hazard']
     # ----- Data setup -----
     if isinstance(stream, pd.Series):
         data = stream.values
     else:
         data = np.asarray(stream)
 
-    bocpd = BOCPD(ConstantHazard(bocpd_hazard), StudentT(mu=0, kappa=1, alpha=1, beta=1))
-    input_dim = 2
-    z_dim = 16
+    bocpd = BOCPD(
+                  ConstantHazard(bocpd_hazard),
+                  StudentT(
+                            mu=bocpd_params['mu'],
+                            kappa=bocpd_params['kappa'],
+                            alpha=bocpd_params['alpha'],
+                            beta=bocpd_params['beta']
+                    )
+            )
+    
     state_dim = state_window
 
-    encoder = VAEEncoder(input_dim=input_dim, hidden_dim=128, z_dim=z_dim, seq_len=seq_len_for_vae).to(device)
-    policy_lstm = LSTMPolicy(input_dim=state_dim + z_dim, hidden_dim=128).to(device)
-    
-    opt_vae = optim.Adam(encoder.parameters(), lr=1e-3)
-    opt_policy = optim.Adam(policy_lstm.parameters(), lr=1e-4)
-    best_val_sharpe = -np.inf
-    buffer = WeightedReplayBuffer(capacity=30000)
+    encoder = VAEEncoder(
+                input_dim=vae_params['input_dim'], 
+                hidden_dim=vae_params['hidden_dim'], 
+                z_dim=vae_params['latent_dim'], 
+                seq_len=seq_len_for_vae
+                ).to(device)
 
+    opt_vae = optim.Adam(encoder.parameters(), lr=vae_params['lr'])
+        
+    policy_lstm = LSTMPolicy(
+                input_dim=state_dim + lstm_params['z_dim'], 
+                hidden_dim = lstm_params['hidden_dim']
+                ).to(device)
+    
+    opt_policy = optim.Adam(policy_lstm.parameters(), lr=lstm_params['lr'])
+    best_val_sharpe = -np.inf
+    
     # ----- Training loop -----
     for epoch in range(num_epochs):
+        buffer = WeightedReplayBuffer(capacity=30000)
         rms = RunningMeanStd()
-        T = min(total_steps, len(data) - state_window - 1)
+        T = min(total_steps, len(data) - 1)
 
-        rms.update(data[:state_window])
-        idx = 0
-        state_returns = list(data[idx: idx + state_window])
-        idx += state_window
-
-        total_recon, total_kl, total_policy_loss = 0, 0, 0
         total_pnl = 0.0
         discounted_pnl = 0.0
-        rt_mle = [0]*state_window
-        cp_flag_list = [0]*state_window
-        actions_pnl = [0]*state_window
         prev_action = 0.0  # for transaction cost calc
 
+        # initialize state: last `state_window` returns
+        state_returns = [0.0]*(state_window-1)
+        state_returns.append(data[0])
+        vae_state_diff = np.array([0.0]*seq_len_for_vae)
+        last_action = 0.0
+        out_recon = []
+        actions_pnl = []
+        total_recon, total_kl, total_policy_loss = 0.0, 0.0, 0.0
+
         for step in trange(T):
-            cur_ret = data[idx]
+            cur_ret = data[step]
             rms.update([cur_ret])
             norm_ret = float((cur_ret - rms.mean) / (math.sqrt(rms.var) + 1e-8))
 
             # --- BOCPD change-point probability ---
-            change_prob = bocpd.update(norm_ret)
-            rt_mle.append(bocpd.rt)
-            cp_flag = 1 if rt_mle[idx] < rt_mle[idx-1] else 0
-            cp_flag_list.append(cp_flag)
+            change_prob, cp_flag = bocpd.update(norm_ret)
 
             # --- Encoder (VAE) ---
-            seq_start = max(0, idx - seq_len_for_vae + 1)
-            seq_rets = data[seq_start: idx + 1]
+            seq_start = max(0, step - seq_len_for_vae + 1)
+            seq_rets = data[seq_start: step + 1]
+            if step == 0:
+                cur_dif = data[step]
+            else:
+                cur_dif = data[step] - data[step-1]
+            vae_state_diff = np.append(vae_state_diff, cur_dif)
+            seq_diff = vae_state_diff[-seq_len_for_vae:]
             if len(seq_rets) < seq_len_for_vae:
                 pad = np.zeros(seq_len_for_vae - len(seq_rets))
                 seq_rets = np.concatenate([pad, seq_rets])
 
             seq_inp = np.stack([
-                (seq_rets - rms.mean) / (math.sqrt(rms.var) + 1e-8),
+                (seq_rets - rms.mean) / (math.sqrt(rms.var) + 1e-8), seq_diff,
                 np.ones_like(seq_rets) * change_prob
             ], axis=-1)[None, ...]
 
             seq_inp_t = torch.tensor(seq_inp, dtype=torch.float32).to(device)
             x_hat, mu, logvar, z_t = encoder(seq_inp_t)
-            kl_w = min(1.0, epoch / 100)
-            loss_vae, recon_loss, kl_loss = vae_loss(seq_inp_t, x_hat, mu, logvar, kl_weight=kl_w)
+            loss_vae, recon_loss, kl_loss = vae_loss(seq_inp_t, x_hat, mu, logvar, kl_weight=vae_params['kl_wt'])
             opt_vae.zero_grad(); loss_vae.backward(); opt_vae.step()
+
+            # keep denormalized reconstruction for plotting if desired
+            # assume first channel is the "return" we are reconstructing
+            with torch.no_grad():
+                recon_np = x_hat.detach().cpu().numpy()[0, :, 0]  # seq_len values
+                # take last timestep reconstruction (corresponds to current idx)
+                recon_last_norm = recon_np[-1]
+                recon_last_denorm = recon_last_norm * math.sqrt(rms.var) + rms.mean
+                out_recon.append(recon_last_denorm)
 
             # --- Policy (Actor) ---
             state_arr = np.array(state_returns[-state_window:])
             state_norm = (state_arr - rms.mean) / (math.sqrt(rms.var) + 1e-8)
             state_t = torch.tensor(state_norm.astype(np.float32))[None, :].to(device)
 
-            inp_t = torch.cat([state_t, z_t.detach()], dim=-1)
+            inp_t = torch.cat([state_t, mu.detach()], dim=-1)
             action_t = torch.tanh(policy_lstm(inp_t))  # [-1, 1]
     
-            next_ret = data[idx + 1]
+            next_ret = data[step + 1]
 
             # --- PnL computation (with gradient flow) ---
-            next_ret_t = torch.tensor([next_ret], dtype=torch.float32, device=device)
-            pnl = action_t * next_ret_t
-            tc = transaction_cost * torch.abs(action_t - prev_action)
-            pnl = pnl - tc  # subtract cost
+            next_ret_t = torch.tensor([next_ret - cur_ret], dtype=torch.float32, device=device)
+
+            pnl_t = action_t * next_ret_t
+            tc = 0 # transaction_cost * torch.abs(action_t - prev_action) # disabled for now
+            pnl_net_t = pnl_t - tc  # subtract cost # maximize pnl
             
-            loss_policy = -pnl.mean()  # maximize pnl
+            loss_policy = -pnl_net_t.mean()  # maximize pnl
 
             opt_policy.zero_grad()
             loss_policy.backward()
             opt_policy.step()
 
-            total_policy_loss += loss_policy.item()
-            total_pnl += pnl.item()
-            actions_pnl.append(pnl.item())
-            discounted_pnl += (gamma ** step) * pnl.item()
+            pnl_scalar = float(pnl_net_t.detach().cpu().numpy().squeeze())
+        
+            total_policy_loss += float(loss_policy.detach().cpu().numpy())
+            total_pnl += pnl_scalar
+            actions_pnl.append(pnl_scalar)
+            discounted_pnl += (gamma ** step) * pnl_scalar
 
-            prev_action = action_t.detach()  # store detached value
+            prev_action = action_t.detach().clone()  # store detached value
 
-            total_recon += recon_loss
-            total_kl += kl_loss
-
+            # compute weight: mix BOCPD surprise and reward magnitude
+            w_cp = float(change_prob)
+            w_ret = abs(pnl_scalar)
+            weight = float(replay_alpha_cp * w_cp + (1.0 - replay_alpha_cp) * w_ret + 1e-8)
             # --- Store transition in buffer (for future stability) ---
             buffer.push(state_norm.astype(np.float32),
-                        action_t.detach().cpu().numpy().astype(np.float32),
-                        pnl, #.item(),
-                        None, False, 1.0,
-                        seq_inp.squeeze(0).astype(np.float32))
+                        action_t.detach().cpu().numpy().squeeze().astype(np.float32),
+                        float(pnl_scalar), #.item(),
+                        None, False, weight,
+                        inp_t.squeeze(0).cpu().numpy().astype(np.float32))
 
             # Upweight near detected changes
             if cp_flag == 1:
-                buffer.upweight_recent(window=200, multiplier=1.8)
+                buffer.upweight_recent(window=200, multiplier=joint_params['wt_multplier'])
+            
+            # periodic updates
+            if ((buffer.size() >= joint_params['buffer_size_updates']) and (step % 8 == 0)):
+                batch = buffer.sample(joint_params['sample_batch_size'])
+                
+                # prepare tensors
+                states = torch.tensor(np.stack([b.state for b in batch]), dtype=torch.float32, device=device)
+                actions = torch.tensor(np.stack([b.action for b in batch]), dtype=torch.float32, device=device).unsqueeze(-1)
+                rewards = torch.tensor(np.stack([b.reward for b in batch]), dtype=torch.float32, device=device).unsqueeze(-1)
+                sample_weights = [b.weight for b in batch]
+                sample_weights_t = torch.tensor(sample_weights, dtype=torch.float32, device=device).unsqueeze(-1)
 
+                # compute predicted actions and weighted loss (policy)
+                with torch.no_grad():
+                    z_placeholder = torch.zeros(states.size(0), lstm_params['z_dim'], device=device)  # if you want to include z, adapt
+                policy_actions = policy_lstm(torch.cat([states, z_placeholder], dim=-1))
+                pred_actions = torch.tanh(policy_actions)
+
+                # policy loss: -pred_actions * reward (we want actions that produce positive reward)
+                per_sample_loss = - (pred_actions * rewards)  # (N,1)
+                weighted_loss = (per_sample_loss * sample_weights_t).mean()
+                policy_loss = per_sample_loss.mean()
+                opt_policy.zero_grad()
+                weighted_loss.backward()
+                opt_policy.step()
+
+                total_policy_loss += policy_loss #float(weighted_loss.detach().cpu().numpy())
+            
             # Move window
             state_returns.append(next_ret)
-            idx += 1
+            total_recon += recon_loss
+            total_kl += kl_loss
 
         avg_recon = total_recon / len(data)
         avg_kl = total_kl / len(data)
@@ -154,7 +219,7 @@ def train_loop_lstm(
         val_metrics = evaluate_strategy(actions_pnl)
         val_sharpe = val_metrics["sharpe_ratio"]
 
-        print(f"Val Sharpe={val_sharpe:.3f}")
+        print(f"Sharpe = {val_sharpe:.3f}")
 
         # --- save best checkpoint ---
         if val_sharpe > best_val_sharpe:
