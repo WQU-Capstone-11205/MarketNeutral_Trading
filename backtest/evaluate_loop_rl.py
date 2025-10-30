@@ -116,7 +116,7 @@ def evaluate_loop_rl(
             cur_dif = data[step] - data[step-1]
         vae_state_diff = np.append(vae_state_diff, cur_dif)
         seq_diff = vae_state_diff[-seq_len_for_vae:]
-        seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
+        #seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
         # pad if needed
         if len(seq_rets) < seq_len_for_vae:
             pad = np.zeros(seq_len_for_vae - len(seq_rets))
