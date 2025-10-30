@@ -147,7 +147,7 @@ class BOCPD_VAE_Tuner:
 
                 # # --- VAE encoder ---
                 x_hat, mu, logvar, z_t = encoder(seq_inp_t)
-                z_ts.append(z_t)
+                z_ts.append(mu)
                 loss_vae, recon_loss, kl_loss = vae_loss(seq_inp_t, x_hat, mu, logvar, kl_weight=params['kl_wt'])
                 opt_vae.zero_grad(); loss_vae.backward(); opt_vae.step()
                 total_recon_loss += recon_loss
