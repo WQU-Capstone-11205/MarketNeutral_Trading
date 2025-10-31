@@ -1,6 +1,8 @@
+import math
 import numpy as np
 from sklearn.linear_model import LinearRegression
 import pandas as pd
+import statsmodels.api as sm
 
 def alpha_beta(strategy_returns, benchmark_returns, freq=252):
     # Convert pandas Series to numpy arrays if they are not already
@@ -71,3 +73,53 @@ def evaluate_composite_score(trades, cost_per_trade, freq_per_year=252):
       # composite score (with weights)
       score = sharpe - 0.5 * max_dd - 0.2 * cost_penalty
       return score
+
+def calculate_performance_metrics(returns, cumulative_returns, risk_free_rate=0.01, benchmark_returns=None):
+    """
+        Calculates Sharpe Ratio, Sortino Ratio, 
+        Max Drawdown, Annual Volatility, 
+        Alpha, and Beta.
+    """
+
+    # Annualized Returns
+    annual_returns = cumulative_returns.iloc[-1]**(252/len(returns)) - 1
+
+    # Annual Volatility
+    annual_volatility = returns.std() * np.sqrt(252)
+
+    # Sharpe Ratio
+    sharpe_ratio = (annual_returns - risk_free_rate) / annual_volatility
+
+    # Sortino Ratio
+    downside_returns = returns[returns < 0]
+    downside_deviation = downside_returns.std() * np.sqrt(252)
+    sortino_ratio = (annual_returns - risk_free_rate) / downside_deviation if downside_deviation > 0 else 0
+
+    # Max Drawdown
+    peak = cumulative_returns.cummax()
+    drawdown = (cumulative_returns - peak) / peak
+    max_drawdown = drawdown.min()
+
+    # Alpha and Beta (requires a benchmark)
+    alpha, beta = None, None
+    if benchmark_returns is not None:
+        # Align returns and benchmark returns
+        aligned_returns, aligned_benchmark_returns = returns.align(benchmark_returns, join='inner', axis=0)
+        aligned_returns = aligned_returns.dropna()
+        aligned_benchmark_returns = aligned_benchmark_returns.dropna()
+
+        if not aligned_returns.empty and not aligned_benchmark_returns.empty:
+            X = sm.add_constant(aligned_benchmark_returns)
+            model = sm.OLS(aligned_returns, X).fit()
+            beta = model.params.iloc[1]
+            alpha = model.params.iloc[0] * 252 # Annualize alpha (daily alpha * 252)
+
+    return {
+        "Annual Returns": annual_returns,
+        "Annual Volatility": annual_volatility,
+        "Sharpe Ratio": sharpe_ratio,
+        "Sortino Ratio": sortino_ratio,
+        "Max Drawdown": max_drawdown,
+        "Alpha": alpha,
+        "Beta": beta,
+    }
