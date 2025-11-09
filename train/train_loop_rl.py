@@ -10,6 +10,8 @@ from collections import deque, namedtuple
 import torch.optim as optim
 from tqdm import trange
 import pandas as pd
+
+from util.seed_random import seed_random
 from util.running_mean_std import RunningMeanStd
 from structural_break.bocpd import BOCPD
 from structural_break.hazard import ConstantHazard
@@ -30,8 +32,11 @@ def train_loop_rl(
     num_epochs=10,
     save_dir="checkpoints",
     total_steps=10000,
-    device='cpu'
+    device='cpu',
+    stop_loss_threshold=-0.02,
+    stop_loss_penalty=0.001,
 ):
+    seed_random()
     state_window=joint_params['state_window']
     seq_len_for_vae=vae_params['vae_seq_len']
     bocpd_hazard=bocpd_params['hazard']
@@ -55,22 +60,22 @@ def train_loop_rl(
     state_dim = state_window  # using flattened returns as state; in practice use richer features
 
     actor = Actor(
-                state_dim=state_window, 
-                z_dim=rl_params['state_dim'], 
-                hidden_dim=rl_params['hidden_dim'], 
+                state_dim=state_window,
+                z_dim=rl_params['state_dim'],
+                hidden_dim=rl_params['hidden_dim'],
                 action_dim=rl_params['action_dim']
                 ).to(device)
 
     critic = Critic(
-                state_dim=state_window, 
-                z_dim=rl_params['state_dim'], 
+                state_dim=state_window,
+                z_dim=rl_params['state_dim'],
                 hidden_dim=rl_params['hidden_dim']
                 ).to(device)
 
     encoder = VAEEncoder(
-                input_dim=vae_params['input_dim'], 
-                hidden_dim=vae_params['hidden_dim'], 
-                z_dim=vae_params['latent_dim'], 
+                input_dim=vae_params['input_dim'],
+                hidden_dim=vae_params['hidden_dim'],
+                z_dim=vae_params['latent_dim'],
                 seq_len=seq_len_for_vae
                 ).to(device)
 
@@ -78,11 +83,13 @@ def train_loop_rl(
     critic_opt = optim.Adam(critic.parameters(), lr=rl_params['lr'])
     opt_vae = optim.Adam(encoder.parameters(), lr=vae_params['lr'])
     best_val_sharpe = -np.inf
+    gamma = rl_params.get("gamma", 0.99)
+    buffer = WeightedReplayBuffer(capacity=20000)
+    rms = RunningMeanStd()
 
     # training loop
     for epoch in range(num_epochs):
-        buffer = WeightedReplayBuffer(capacity=30000)
-        rms = RunningMeanStd()
+
         # action noise base sigma
         base_action_sigma = joint_params['base_action_sigma']
         # walkthrough
@@ -94,8 +101,11 @@ def train_loop_rl(
         vae_state_diff = np.array([0.0]*seq_len_for_vae)
         last_action = 0.0
         out_recon = []
-        actions_pnl = []
+        portfolio_returns = []
         total_recon, total_kl, total_policy_loss = 0, 0, 0
+        cp_probs = []
+        cumulative_pnl = 0.0
+        stop_loss_count = 0
 
         for step in trange(T):
             cur_ret = data[step]
@@ -107,20 +117,22 @@ def train_loop_rl(
             # build encoder input sequence (seq_len_for_vae)
             seq_start = max(0, step - seq_len_for_vae + 1)
             seq_rets = data[seq_start: step + 1]
+            cp_probs.append(change_prob)
+            cps_seq = cp_probs[seq_start: step + 1] ####
             if step == 0:
                 cur_dif = data[step]
             else:
                 cur_dif = data[step] - data[step-1]
             vae_state_diff = np.append(vae_state_diff, cur_dif)
-            seq_diff = vae_state_diff[-seq_len_for_vae:]
-            #seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
             # pad if needed
             if len(seq_rets) < seq_len_for_vae:
                 pad = np.zeros(seq_len_for_vae - len(seq_rets))
                 seq_rets = np.concatenate([pad, seq_rets])
-            # form encoder input: (seq_len, seq_diff, input_dim) where input_dim = [norm_ret, seq_diff, change_prob]
-            seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8), seq_diff,
-                                  np.ones_like(seq_rets) * change_prob ], axis=-1)[None, ...]  # batch=1 # (1, seq_len_for_vae, 3)
+                cps_pad = np.zeros(seq_len_for_vae - len(cps_seq)) ####
+                cps_seq = np.concatenate([cps_pad, cps_seq]) ####
+            # form encoder input: (seq_len, seq_diff, input_dim) where input_dim = [norm_ret, change_prob]
+            seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8),
+                                  cps_seq ], axis=-1)[None, ...]  # batch=1 # (1, seq_len_for_vae, 2)
             seq_inp_t = torch.tensor(seq_inp, dtype=torch.float32).to(device)
             # # --- VAE encoder ---
             x_hat, mu, logvar, z_t = encoder(seq_inp_t)
@@ -131,7 +143,7 @@ def train_loop_rl(
             # assume first channel is the "return" we are reconstructing
             with torch.no_grad():
                 recon_np = x_hat.detach().cpu().numpy()[0, :, 0]  # seq_len values
-                # take last timestep reconstruction (corresponds to current idx)
+                # take last timestep reconstruction (corresponds to current step)
                 recon_last_norm = recon_np[-1]
                 recon_last_denorm = recon_last_norm * math.sqrt(rms.var) + rms.mean
                 out_recon.append(recon_last_denorm)
@@ -148,24 +160,46 @@ def train_loop_rl(
             noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob)  # alpha=5 scaling
             action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
             action = np.clip(action, -1.0, 1.0)
-            # risk-adjusted position scaling
-            #position = action * (1 - change_prob) / (math.sqrt(rms.var) + 1e-8)
-            actions_pnl.append(action)
-            # interpret action: e.g., fraction of capital to long (positive) or short (negative)
-            # reward: simple PnL = position × Δspread
             next_ret = data[step + 1]
-            reward = float(action * (next_ret - cur_ret))
+            next_state_arr = np.array(state_returns[-(state_window-1):] + [next_ret])
+            next_state_norm = (next_state_arr - rms.mean) / (math.sqrt(rms.var) + 1e-8)
 
+            # normalize reward by volatility and include transaction costs
+            eps = 1e-8
+            raw_reward = float(action * (next_ret - cur_ret))          # delta spread × position
+            reward = raw_reward / (math.sqrt(rms.var) + eps)
+
+            cumulative_pnl += reward       # track cumulative profit/loss
+
+            # STOP-LOSS CHECK
+            stop_triggered = False
+            if cumulative_pnl <= stop_loss_threshold:
+                reward -= abs(stop_loss_penalty)   # penalize hitting stop-loss
+                action = 0.0                         # force close position
+                stop_triggered = True
+                stop_loss_count += 1
+                cumulative_pnl = 0.0
+                done_flag = True                   # optionally end episode early
+
+            # transaction cost: proportional to change in action magnitude
+            tc = joint_params.get('transaction_cost', 0.0)
+            trans_cost = tc * float(np.abs(action - last_action).sum())  # sum if vector action
+            reward = reward - trans_cost
+            portfolio_returns.append(reward)
+            
             # store transition in buffer with initial weight 1.0
             buffer.push(
                 state_norm.astype(np.float32),
-                action.astype(np.float32),
+                np.array([action]).astype(np.float32), # Ensure action is a numpy array
                 reward,
-                None, False,
+                next_state_norm.astype(np.float32),
+                False,
                 1.0,
-                seq_inp.squeeze(0).astype(np.float32)  # shape (seq_len, input_dim)
+                None
             )
 
+            last_action = action
+            
             # if change_prob large, upweight recent transitions
             if cp_flag == 1:
                 buffer.upweight_recent(window=200, multiplier=joint_params['wt_multplier'])
@@ -178,19 +212,30 @@ def train_loop_rl(
                 states = torch.tensor(np.stack([b.state for b in batch]), dtype=torch.float32).to(device)
                 actions = torch.tensor(np.stack([b.action for b in batch]), dtype=torch.float32).to(device)
                 rewards = torch.tensor(np.stack([b.reward for b in batch]), dtype=torch.float32).unsqueeze(-1).to(device)
-
+                next_states = torch.tensor(np.stack([b.next_state for b in batch]), dtype=torch.float32).to(device)
+                gamma = 0.99 # rl_params.get('gamma', 0.99)
                 # critic update
                 values = critic(states, torch.zeros(states.size(0), rl_params['state_dim']).to(device))  # critic input placeholder z
-                targets = rewards
-                critic_loss = nn.MSELoss()(values, targets)
-                critic_opt.zero_grad(); critic_loss.backward(); critic_opt.step()
 
-                # actor update
                 with torch.no_grad():
-                    adv = (rewards - values).detach()
+                    next_values = critic(next_states, torch.zeros(next_states.size(0), rl_params['state_dim']).to(device))
+                    targets = rewards + (gamma * next_values)
+                critic_loss = nn.MSELoss()(values, targets)
+                critic_opt.zero_grad();
+                critic_loss.backward();
+                torch.nn.utils.clip_grad_norm_(critic.parameters(), 1.0)
+                critic_opt.step()
+
+                # actor update: advantage-based
+                with torch.no_grad():
+                    adv = (targets - values).detach()  # shape (batch, 1)
+                # actor update
                 pred_actions = actor(states, torch.zeros(states.size(0), rl_params['state_dim']).to(device))
                 actor_loss = - (pred_actions * adv).mean()
-                actor_opt.zero_grad(); actor_loss.backward(); actor_opt.step()
+                actor_opt.zero_grad();
+                actor_loss.backward();
+                torch.nn.utils.clip_grad_norm_(actor.parameters(), 1.0)
+                actor_opt.step()
                 total_policy_loss += actor_loss.item()
 
             # update state
@@ -198,6 +243,9 @@ def train_loop_rl(
 
             total_recon += recon_loss
             total_kl += kl_loss
+
+        if stop_loss_count > 0:
+            print(f"Stop-loss triggered for {stop_loss_count} PnLs")
 
         if (epoch + 1) == num_epochs:
             print()
@@ -209,7 +257,7 @@ def train_loop_rl(
         # ============================================================
         #   Save models for best Sharpe ratio
         # ============================================================
-        val_metrics = evaluate_strategy(actions_pnl)
+        val_metrics = evaluate_strategy(portfolio_returns)
         val_sharpe = val_metrics["sharpe_ratio"]
 
         print(f"Sharpe ={val_sharpe:.3f}")
