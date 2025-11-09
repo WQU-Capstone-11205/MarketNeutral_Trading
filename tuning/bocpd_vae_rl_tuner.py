@@ -1,19 +1,3 @@
-import torch
-from torch import nn, optim
-from typing import Dict, Any, List, Callable
-import math
-import numpy as np
-import random
-from typing import Dict, List, Any
-from itertools import product
-
-from util.running_mean_std import RunningMeanStd
-from util.metrics import evaluate_composite_score
-from ml_dl_models.actor_critic import Actor
-from ml_dl_models.actor_critic import Critic
-from util.weighted_replay_buffer import WeightedReplayBuffer
-from tuning.bocpd_vae_tuner import BOCPD_VAE_Tuner
-
 class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
     default_rl_space = {
         "state_dim": [16],
@@ -27,22 +11,24 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         "base_action_sigma": [0.01, 0.1, 0.3],
         "wt_multplier": [1.5, 1.8, 2.0],
         "buffer_size_updates": [16, 64, 128, 256],
-        "sample_batch_size": [8, 16, 64, 128]
+        "sample_batch_size": [8, 16, 64, 128],
+        "transaction_cost": [0.001, 0.01, 0.1]
     }
 
     best_rl_params = {
         "state_dim": 16,
         "action_dim": 1,
-        "hidden_dim": 256, #64
+        "hidden_dim": 64,
         "lr": 1e-5
     }
 
     best_joint_params = {
         "state_window": 25,
-        "base_action_sigma": 0.01,
-        "wt_multplier": 1.8,
-        "buffer_size_updates": 64,
-        "sample_batch_size": 16
+        "base_action_sigma": 0.3,
+        "wt_multplier": 2.0,
+        "buffer_size_updates": 256,
+        "sample_batch_size": 64,
+        "transaction_cost": 0.001
     }
 
     def __init__(self, custom_bocpd_space: Dict[str, List[Any]]=None,
@@ -66,10 +52,7 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
 
     def tune_rl(self, data, change_probs, cpflags, z_ts):
         # initialize random seed
-        np.random.seed(42)
-        random.seed(42)
-        torch.manual_seed(42)
-
+        seed_random()
         base_action_sigma = 0.1
         state_window = 50
         device = 'cpu'
@@ -78,12 +61,15 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
             state_returns = [0.0]*(state_window-1)
             state_returns.append(data.iloc[0])
             rms = RunningMeanStd()
+            gamma = params.get("gamma", 0.99)
             actor = Actor(state_dim=state_window, z_dim=params['state_dim'], hidden_dim=params['hidden_dim'], action_dim=params['action_dim']).to(device)
             critic = Critic(state_dim=state_window, z_dim=params['state_dim'], hidden_dim=params['hidden_dim']).to(device)
             actor_opt = optim.Adam(actor.parameters(), lr=params['lr'])
             critic_opt = optim.Adam(critic.parameters(), lr=params['lr'])
             buffer = WeightedReplayBuffer(capacity=30000)
-            trades = []
+            last_action = 0.0
+            portfolio_returns = []
+            
             for i in range(len(data) - 1):
                 rms.update([data.iloc[i]]) # Use iloc for pandas Series
                 state_arr = np.array(state_returns[-state_window:])
@@ -97,21 +83,32 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
                 noise_sigma = base_action_sigma * (1.0 + 5.0 * change_probs[i])  # alpha=5 scaling, cp is now 1D
                 action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
                 action = np.clip(action, -1.0, 1.0)
-                # risk-adjusted position scaling
-                #position = action * (1 - change_probs[i]) / (math.sqrt(rms.var) + 1e-8)
                 next_ret = data.iloc[i + 1] # Use iloc for pandas Series
-                reward = float(action * (next_ret - data.iloc[i]))
-                #reward = float(action * next_ret)
-                trades.append(reward)
+                next_state_arr = np.array(state_returns[-(state_window-1):] + [next_ret])
+                next_state_norm = (next_state_arr - rms.mean) / (math.sqrt(rms.var) + 1e-8)
+
+                # normalize reward by volatility and include transaction costs
+                eps = 1e-8
+                raw_reward = float(action * (next_ret - data.iloc[i]))          # delta spread × position
+                reward = raw_reward / (math.sqrt(rms.var) + eps)
+
+                # transaction cost: proportional to change in action magnitude
+                tc = 0.01
+                trans_cost = tc * float(np.abs(action - last_action).sum())  # sum if vector action
+                reward = reward - trans_cost
+                portfolio_returns.append(reward)
+
                 # store transition in buffer with initial weight 1.0
                 buffer.push(
                     state_norm.astype(np.float32),
                     action.astype(np.float32),
                     reward,
-                    None, False,
+                    next_state_norm.astype(np.float32),
+                    False,
                     1.0,
                     None  # shape (seq_len, input_dim)
                 )
+                last_action = action.copy()
 
                 # if change_prob large, upweight recent transitions
                 if cpflags[i] == 1:
@@ -125,23 +122,34 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
                     states = torch.tensor(np.stack([b.state for b in batch]), dtype=torch.float32).to(device)
                     actions = torch.tensor(np.stack([b.action for b in batch]), dtype=torch.float32).to(device)
                     rewards = torch.tensor(np.stack([b.reward for b in batch]), dtype=torch.float32).unsqueeze(-1).to(device)
+                    next_states = torch.tensor(np.stack([b.next_state for b in batch]), dtype=torch.float32).to(device)
 
-                    # critic update
-                    values = critic(states, torch.zeros(states.size(0), params['state_dim']).to(device))  # critic input placeholder z
-                    targets = rewards
+                    # Critic TD(0) update
+                    values = critic(states, torch.zeros(states.size(0), params["state_dim"]).to(device))
+                    with torch.no_grad():
+                        next_values = critic(next_states, torch.zeros(next_states.size(0), params["state_dim"]).to(device))
+                        targets = rewards + gamma * next_values
+
+                    # # critic update
                     critic_loss = nn.MSELoss()(values, targets)
-                    critic_opt.zero_grad(); critic_loss.backward(); critic_opt.step()
+                    critic_opt.zero_grad();
+                    critic_loss.backward();
+                    torch.nn.utils.clip_grad_norm_(critic.parameters(), 1.0)
+                    critic_opt.step()
 
                     # actor update
                     with torch.no_grad():
-                        adv = (rewards - values).detach()
+                        adv = (targets - values).detach()
                     pred_actions = actor(states, torch.zeros(states.size(0), params['state_dim']).to(device))
                     actor_loss = - (pred_actions * adv).mean()
-                    actor_opt.zero_grad(); actor_loss.backward(); actor_opt.step()
+                    actor_opt.zero_grad();
+                    actor_loss.backward();
+                    torch.nn.utils.clip_grad_norm_(actor.parameters(), 1.0)
+                    actor_opt.step()
 
                 state_returns.append(next_ret)
 
-            score = evaluate_composite_score(trades, cost_per_trade=0.001)
+            score = evaluate_composite_score(portfolio_returns, cost_per_trade=0.001)
             print(f'RL score = {round(score,4)} :: params = {params}')
             if score > best_score:
                 best_score, best_params = score, params
@@ -151,11 +159,10 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
 
     def joint_tuning(self, data, best_rl_params, change_probs, cpflags, z_ts):
         # initialize random seed
-        np.random.seed(42)
-        random.seed(42)
-        torch.manual_seed(42)
+        seed_random()
         device = 'cpu'
         best_score, best_params = -np.inf, None
+        gamma = best_rl_params.get("gamma", 0.99)
         for params in self._grid(self.joint_space):
             if params['sample_batch_size'] >= params['buffer_size_updates']:
                 continue
@@ -163,13 +170,16 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
             state_window = params['state_window']
             state_returns = [0.0]*(state_window-1)
             state_returns.append(data.iloc[0])
+            tc = params['transaction_cost']
             rms = RunningMeanStd()
             actor = Actor(state_dim=state_window, z_dim=best_rl_params['state_dim'], hidden_dim=best_rl_params['hidden_dim'], action_dim=best_rl_params['action_dim']).to(device)
             critic = Critic(state_dim=state_window, z_dim=best_rl_params['state_dim'], hidden_dim=best_rl_params['hidden_dim']).to(device)
             actor_opt = optim.Adam(actor.parameters(), lr=best_rl_params['lr'])
             critic_opt = optim.Adam(critic.parameters(), lr=best_rl_params['lr'])
             buffer = WeightedReplayBuffer(capacity=30000)
-            trades = []
+            portfolio_returns = []
+            last_action = 0.0
+            
             for i in range(len(data) - 1):
                 rms.update([data.iloc[i]]) # Use iloc for pandas Series
                 state_arr = np.array(state_returns[-state_window:])
@@ -184,15 +194,22 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
                 action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
                 action = np.clip(action, -1.0, 1.0)
                 next_ret = data.iloc[i + 1] # Use iloc for pandas Series
-                reward = float(action * (next_ret - data.iloc[i]))
-                #reward = float(action * next_ret)
-                trades.append(reward)
-                            # store transition in buffer with initial weight 1.0
+                next_state_arr = np.array(state_returns[-(state_window-1):] + [next_ret])
+                next_state_norm = (next_state_arr - rms.mean) / (math.sqrt(rms.var) + 1e-8)
+                eps = 1e-8
+                raw_reward = float(action * (next_ret - data.iloc[i]))
+                reward = raw_reward / (math.sqrt(rms.var) + eps)
+                trans_cost = tc * float(np.abs(action - last_action).sum())
+                reward = reward - trans_cost
+                last_action = action
+                portfolio_returns.append(reward)
+                # store transition in buffer with initial weight 1.0
                 buffer.push(
                     state_norm.astype(np.float32),
                     action.astype(np.float32),
                     reward,
-                    None, False,
+                    next_state_norm.astype(np.float32),
+                    False,
                     1.0,
                     None  # shape (seq_len, input_dim)
                 )
@@ -209,23 +226,34 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
                     states = torch.tensor(np.stack([b.state for b in batch]), dtype=torch.float32).to(device)
                     actions = torch.tensor(np.stack([b.action for b in batch]), dtype=torch.float32).to(device)
                     rewards = torch.tensor(np.stack([b.reward for b in batch]), dtype=torch.float32).unsqueeze(-1).to(device)
+                    next_states = torch.tensor(np.stack([b.next_state for b in batch]), dtype=torch.float32).to(device)
 
-                    # critic update
-                    values = critic(states, torch.zeros(states.size(0), best_rl_params['state_dim']).to(device))  # critic input placeholder z
-                    targets = rewards
+                    # Critic TD(0) update
+                    values = critic(states, torch.zeros(states.size(0), best_rl_params["state_dim"]).to(device))
+                    with torch.no_grad():
+                        next_values = critic(next_states, torch.zeros(next_states.size(0), best_rl_params["state_dim"]).to(device))
+                        targets = rewards + gamma * next_values
+
+                    # # critic update
                     critic_loss = nn.MSELoss()(values, targets)
-                    critic_opt.zero_grad(); critic_loss.backward(); critic_opt.step()
+                    critic_opt.zero_grad();
+                    critic_loss.backward();
+                    torch.nn.utils.clip_grad_norm_(critic.parameters(), 1.0)
+                    critic_opt.step()
 
                     # actor update
                     with torch.no_grad():
-                        adv = (rewards - values).detach()
+                        adv = (targets - values).detach()
                     pred_actions = actor(states, torch.zeros(states.size(0), best_rl_params['state_dim']).to(device))
                     actor_loss = - (pred_actions * adv).mean()
-                    actor_opt.zero_grad(); actor_loss.backward(); actor_opt.step()
+                    actor_opt.zero_grad();
+                    actor_loss.backward();
+                    torch.nn.utils.clip_grad_norm_(actor.parameters(), 1.0)
+                    actor_opt.step()
 
                 state_returns.append(next_ret)
 
-            score = evaluate_composite_score(trades, cost_per_trade=0.001)
+            score = evaluate_composite_score(portfolio_returns, cost_per_trade=0.001)
             print(f'Joint Tuning score = {round(score,4)} :: params = {params}')
             if score > best_score:
                 best_score, best_params = score, params
@@ -234,6 +262,7 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         return best_params, best_score
 
     def tune(self, data):
+        seed_random()
         best_bocpd_params, best_bocpd_score, cps, cpflags, runtime_len = self.tune_bocpd(data)
         print(f"Best BOCPD parameters: {best_bocpd_params}")
         print(f"Best BOCPD score: {round(best_bocpd_score,3)}")
