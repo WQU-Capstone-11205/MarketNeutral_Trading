@@ -31,15 +31,13 @@ def plot_change_points(spread):
     plt.legend()
 
 def plot_rt_change_probs(data, rt_mle, change_probs):
-    print(f'np.sum(change_probs > 0.5) = {np.sum(change_probs > 0.5)}')
-    print(f'Total len of change_probs = {len(change_probs)}')
     sz = len(data)
     
     # --- Plot results ---
     fig, ax1 = plt.subplots(figsize=(12, 5))
     
     ax1.plot(data.index[:sz-1], data[:sz-1], label='Original Spread', color='gray')
-    ax1.set_ylabel('Observation', color='gray')
+    ax1.set_ylabel('USD/pair trading', color='gray')
     ax1.tick_params(axis='y', labelcolor='gray')
     
     ax2 = ax1.twinx()
@@ -53,7 +51,7 @@ def plot_rt_change_probs(data, rt_mle, change_probs):
     ax3.plot(data.index[:sz-1],rt_mle, label='Most Likely Run Length', color='blue', linestyle='--')
     ax3.set_ylabel('Most Likely Run Length', color='blue')
     ax3.tick_params(axis='y', labelcolor='blue')
-    
+    ax1.set_xlabel('Date')
     plt.title('BOCPD: Change Probability Over Time (for Test spread)')
     fig.legend(loc="upper right", bbox_to_anchor=(1,1), bbox_transform=ax1.transAxes)
     plt.show()
