@@ -10,7 +10,9 @@ import matplotlib.pyplot as plt
 from tqdm import trange
 import torch.optim as optim
 import math
+
 from util.running_mean_std import RunningMeanStd
+from util.seed_random import seed_random
 from structural_break.bocpd import BOCPD
 from structural_break.hazard import ConstantHazard
 from structural_break.distribution import StudentT
@@ -21,17 +23,25 @@ from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.models_io import load_RLmodels
 
 def evaluate_loop_rl(
-          data, 
-          bocpd_params, 
-          vae_params, 
-          rl_params, 
-          joint_params, 
-          seq_len = 50, 
-          total_steps = 100000, 
-          load_dir="checkpoints", 
-          device="cpu", 
-          exploration=False
+          stream,
+          bocpd_params,
+          vae_params,
+          rl_params,
+          joint_params,
+          total_steps = 100000,
+          load_dir="checkpoints",
+          device="cpu",
+          exploration=False,
+          stop_loss_threshold=-0.02, #same stop-loss threshold as training (e.g., −2%)
+          stop_loss_penalty=0.001    # optional penalty for hitting stop-loss
 ):
+    if isinstance(stream, pd.Series):
+        data = stream.values  # just the spread values
+        dates = stream.index    # keep dates for later if you want plotting
+    else:
+        data = np.asarray(stream)
+        dates = None
+    seed_random()
     state_window = joint_params['state_window']
     seq_len_for_vae = vae_params['vae_seq_len']
     state_dim = state_window
@@ -81,13 +91,18 @@ def evaluate_loop_rl(
     bocpd.reset_params()
 
     rms = RunningMeanStd()
+    rms_stats = np.load(os.path.join(load_dir, "rms_stats.npz"))
+    # --- Assign back to rms object ---
+    rms.mean = rms_stats["mean"]
+    rms.var = rms_stats["var"]
+
     # action noise base sigma
     base_action_sigma = joint_params['base_action_sigma']
     # walkthrough
     T = min(total_steps, len(data) - 1)
 
     # initialize state: last `state_window` returns
-    state_returns = [0.0]*(state_window-1)
+    state_returns = [data[0]]*(state_window-1)
     state_returns.append(data[0])
     vae_state_diff = np.array([0.0]*seq_len_for_vae)
     last_action = 0.0
@@ -97,33 +112,38 @@ def evaluate_loop_rl(
     rewards = []
     actions = []
     pnl = []
+    portfolio_returns = []
+    equity_curve = []
     capital = 1.0
-
-    # for i in range(len(data_n) - seq_len):
+    cp_probs = []
+    tc = joint_params.get('transaction_cost', 0.0)
+    cumulative_pnl = 0.0          # track total PnL
+    stop_loss_count = 0
     for step in trange(T):
         cur_ret = data[step]
         rms.update([cur_ret])
         # BOCPD expects scalar observation -> use normalized return
         norm_ret = float((cur_ret - rms.mean) / (math.sqrt(rms.var) + 1e-8))
         change_prob, _ = bocpd.update(norm_ret)  # float in [0,1]
-
+        cp_probs.append(change_prob)
         # build encoder input sequence (seq_len_for_vae)
         seq_start = max(0, step - seq_len_for_vae + 1)
         seq_rets = data[seq_start: step + 1]
+        cps_seq = cp_probs[seq_start: step + 1] ####
         if step == 0:
             cur_dif = data[step]
         else:
             cur_dif = data[step] - data[step-1]
         vae_state_diff = np.append(vae_state_diff, cur_dif)
-        seq_diff = vae_state_diff[-seq_len_for_vae:]
-        #seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
         # pad if needed
         if len(seq_rets) < seq_len_for_vae:
             pad = np.zeros(seq_len_for_vae - len(seq_rets))
             seq_rets = np.concatenate([pad, seq_rets])
+            cps_pad = np.zeros(seq_len_for_vae - len(cps_seq)) ####
+            cps_seq = np.concatenate([cps_pad, cps_seq]) ####
         # form encoder input: (seq_len, input_dim) where input_dim = [norm_ret, change_prob]
-        seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8), seq_diff,
-                              np.ones_like(seq_rets) * change_prob ], axis=-1)[None, ...]  # batch=1
+        seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8),
+                              cps_seq ], axis=-1)[None, ...]  # batch=1
         seq_inp_t = torch.tensor(seq_inp, dtype=torch.float32).to(device)
 
         with torch.no_grad():
@@ -151,29 +171,55 @@ def evaluate_loop_rl(
             noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob) # alpha = 5.0
             action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
         else:
-            # stabilized adaptive (no noise, but can still scale amplitude)
-            action = action_mean * (1.0 - 0.5 * change_prob)
+            action = action_mean * (1.0 - 0.5 * change_prob) # 0.5 * change_prob
         action = np.clip(action, -1.0, 1.0)
-        #position = action * (1 - change_prob) / (math.sqrt(rms.var) + 1e-8)
         actions.append(action)
         next_ret = data[step + 1]
-        reward = action * (next_ret - cur_ret)
-        #reward = float(action * next_ret)
-        rewards.append(reward)
-        capital *= (1 + reward)
-        pnl.append(capital)
-        #all_recons.append(torch.mean((x_hat - seq_inp_t) ** 2).item())
 
+        eps = 1e-8
+        raw_reward = float(action * (next_ret - cur_ret))
+        reward = raw_reward / (math.sqrt(rms.var) + eps)
+        trans_cost = tc * float(np.abs(action - last_action).sum())
+        reward = reward - trans_cost
+        last_action = action.copy()
+        cumulative_pnl += reward                     # track cumulative profit/loss
+
+        # ---------------------------
+        # Stop-loss check
+        # ---------------------------
+        stop_triggered = False
+        if cumulative_pnl <= stop_loss_threshold:
+            reward -= abs(stop_loss_penalty)          # penalize
+            action = 0.0                                # force flat
+            stop_triggered = True
+            stop_loss_count += 1
+            cumulative_pnl = 0.0
+            done_flag = True                          # end evaluation early (optional)
+
+        portfolio_returns.append(reward)
+        if step == 0:
+            equity_curve.append(1+ reward)
+            pnl.append(reward)
+        else:
+            equity_curve.append(equity_curve[-1]*(1+ reward))
+            pnl.append(equity_curve[-1] - 1)
+        rewards.append(reward)
         state_returns.append(data[step+1])
-    
+
+    if stop_loss_count > 0:
+        print(f"Stop-loss triggered for {stop_loss_count} PnLs")
+
     change_probs, rt_mle, cp_flags = bocpd.results
     all_recons.append(all_recons[-1])
     print("Evaluation complete.")
-    metrics = { 
-                'change_probs' : np.array(change_probs), 
-                'rt_mle' : np.array(rt_mle), 
-                'cp_flags' : np.array(cp_flags), 
-                'recons' : np.array(all_recons), 
-                'pnl' : np.array(pnl) 
+    metrics = {
+                'change_probs' : np.array(change_probs),
+                'rt_mle' : np.array(rt_mle),
+                'cp_flags' : np.array(cp_flags),
+                'recons' : np.array(all_recons),
+                'portfolio_returns' : np.array(portfolio_returns),
+                'equity_curve' : np.array(equity_curve),
+                'pnl' : np.array(pnl),
+                'rets' : pd.Series(portfolio_returns, index= dates[:len(dates)-1])
     }
     return metrics
