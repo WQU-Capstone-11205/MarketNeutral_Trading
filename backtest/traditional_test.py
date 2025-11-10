@@ -16,12 +16,36 @@ def backtest_strategy(data, beta, entry_threshold=2, exit_threshold=0.5):
     signals[(z_score < exit_threshold) & (z_score > -exit_threshold)] = 0 # Exit positions
 
     # Backtest
-    # Calculate daily portfolio returns
-    returns = pd.Series(0.0, index=data.index)
-    returns = signals.shift(1) * (data.pct_change().iloc[:, 1] - beta * data.pct_change().iloc[:, 0])
-    returns = returns.dropna()
+    # --- Hybrid model style reward calculation ---
+    rms_mean, rms_var = 0.0, 0.0
+    n = 0
+    rewards = []
+    cumulative_pnl = []
+    cum_pnl = 0.0
 
-    cumulative_returns = returns.cumsum().apply(np.exp)
+    for i in range(1, len(spread)):
+        cur_ret = spread.iloc[i - 1]
+        next_ret = spread.iloc[i]
+        action = signals.iloc[i - 1]
+
+        # Update running mean/variance (Welford)
+        n += 1
+        delta = cur_ret - rms_mean
+        rms_mean += delta / n
+        rms_var += delta * (cur_ret - rms_mean)
+
+        var = rms_var / max(n - 1, 1)
+
+        # RL-style reward: delta spread × position, normalized by variance
+        raw_reward = float(action * (next_ret - cur_ret))
+        reward = raw_reward / (math.sqrt(var) + eps)
+
+        cum_pnl += reward
+        rewards.append(reward)
+        cumulative_pnl.append(cum_pnl)
+
+    rewards = pd.Series(rewards, index=data.index[1:])
+    cumulative_pnl = pd.Series(cumulative_pnl, index=data.index[1:])
 
     return returns, cumulative_returns
 
