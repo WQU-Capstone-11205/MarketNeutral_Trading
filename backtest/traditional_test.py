@@ -22,7 +22,8 @@ def backtest_strategy(data, beta, entry_threshold=2, exit_threshold=0.5):
     rewards = []
     cumulative_pnl = []
     cum_pnl = 0.0
-
+    eps = 1e-8
+    
     for i in range(1, len(spread)):
         cur_ret = spread.iloc[i - 1]
         next_ret = spread.iloc[i]
