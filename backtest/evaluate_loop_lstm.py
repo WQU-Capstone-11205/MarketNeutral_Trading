@@ -16,6 +16,7 @@ from ml_dl_models.lstm import LSTMPolicy
 from ml_dl_models.actor_critic import Critic
 from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.models_io import load_models
+from util.seed_random import seed_random
 
 @torch.no_grad()
 def evaluate_loop_lstm(
@@ -26,7 +27,9 @@ def evaluate_loop_lstm(
           joint_params, 
           save_dir="checkpoints_lstm",
           total_steps = 100000, 
-          device="cpu"
+          device="cpu",
+          stop_loss_threshold=-0.02, #same stop-loss threshold as training (e.g., −2%)
+          stop_loss_penalty=0.001    # optional penalty for hitting stop-loss
     ):
     """
     Evaluate a trained LSTM policy and encoder with VAE + BOCPD context.
@@ -47,14 +50,14 @@ def evaluate_loop_lstm(
     # ---- Prepare data ----
     if isinstance(stream, pd.Series):
         data = stream.values
-        date = stream.index
+        dates = stream.index
     else:
         data = np.asarray(stream)
-
+        dates = None
+    seed_random()
     state_window = joint_params['state_window']
     seq_len_for_vae = vae_params['vae_seq_len']
-    state_dim = state_window
-
+    
     vae_encoder = VAEEncoder(
                           input_dim=vae_params['input_dim'],
                           hidden_dim=vae_params['hidden_dim'],
@@ -63,7 +66,7 @@ def evaluate_loop_lstm(
                           ).to(device)
 
     policy_lstm = LSTMPolicy(
-                          input_dim=state_dim + lstm_params['z_dim'], 
+                          input_dim=state_window + lstm_params['z_dim'], 
                           hidden_dim=lstm_params['hidden_dim']
                           ).to(device)
 
@@ -73,9 +76,6 @@ def evaluate_loop_lstm(
     bocpd_cfg, meta = load_models(save_dir, policy_lstm, vae_encoder,
                               lstm_opt, vae_opt,  device, step=None)
 
-
-    # action noise base sigma
-    base_action_sigma = joint_params['base_action_sigma']
     # walkthrough
     T = min(total_steps, len(data) - 1)
 
@@ -97,20 +97,27 @@ def evaluate_loop_lstm(
     policy_lstm.eval()
     bocpd.reset_params()
 
-
     # ---- Initialize helpers ----
     rms = RunningMeanStd()
-    rms.update(data[:state_window])
+    rms_stats = np.load(os.path.join(save_dir, "rms_stats.npz"))
+    # --- Assign back to rms object ---
+    rms.mean = rms_stats["mean"]
+    rms.var = rms_stats["var"]
+    #rms.update(data[:state_window])
 
     state_returns = [0.0]*(state_window-1)
     state_returns.append(data[0])
-    vae_state_diff = np.array([0.0]*seq_len_for_vae)
-    last_action = 0.0
+    prev_action = 0.0
 
     # action noise base sigma
     all_recons = []
-    pnls = []
+    portfolio_returns = []
+    cp_probs = []
     capital = 1.0
+    transaction_cost = joint_params.get('transaction_cost', 0.0)
+    eps = 1e-8
+    cumulative_pnl = 0.0          # track total PnL
+    stop_loss_count = 0
 
     # ---- Main evaluation loop ----
     for step in trange(T):
@@ -121,24 +128,21 @@ def evaluate_loop_lstm(
 
         # --- BOCPD ---
         change_prob, _ = bocpd.update(norm_ret)
-        
+        cp_probs.append(change_prob)
         # build encoder input sequence (seq_len_for_vae)
         seq_start = max(0, step - seq_len_for_vae + 1)
         seq_rets = data[seq_start: step + 1]
-        if step == 0:
-            cur_dif = data[step]
-        else:
-            cur_dif = data[step] - data[step-1]
-        vae_state_diff = np.append(vae_state_diff, cur_dif)
-        seq_diff = vae_state_diff[-seq_len_for_vae:]
-        # seq_diff = seq_diff / (math.sqrt(rms.var) + 1e-8)
+        cps_seq = cp_probs[seq_start: step + 1]
         # pad if needed
         if len(seq_rets) < seq_len_for_vae:
             pad = np.zeros(seq_len_for_vae - len(seq_rets))
             seq_rets = np.concatenate([pad, seq_rets])
+            cps_pad = np.zeros(seq_len_for_vae - len(cps_seq))
+            cps_seq = np.concatenate([cps_pad, cps_seq])
+
         # form encoder input: (seq_len, input_dim) where input_dim = [norm_ret, change_prob]
-        seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8), seq_diff,
-                              np.ones_like(seq_rets) * change_prob ], axis=-1)[None, ...]  # batch=1
+        seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8),
+                              cps_seq ], axis=-1)[None, ...]  # batch=1
         seq_inp_t = torch.tensor(seq_inp, dtype=torch.float32).to(device)
 
         with torch.no_grad():
@@ -156,17 +160,30 @@ def evaluate_loop_lstm(
 
         inp_t = torch.cat([state_t, mu.detach()], dim=-1)
         action_t = torch.tanh(policy_lstm(inp_t))
-    
-        # --- PnL computation (with gradient flow) ---
+        action_t = torch.clamp(action_t, -1.0, 1.0)
+
         next_ret = data[step + 1]
+        # --- PnL computation (with gradient flow) ---
         next_ret_t = torch.tensor([next_ret - cur_ret], dtype=torch.float32, device=device)
         pnl_t = action_t * next_ret_t
-        tc = 0 # transaction_cost * torch.abs(action_t - prev_action) # disabled for now
+        # normalize reward by volatility and include transaction costs
+        pnl_t_norm = pnl_t / (math.sqrt(rms.var) + eps)
+        tc = transaction_cost * float(np.abs((action_t.detach().cpu().numpy().squeeze()) - prev_action).sum())  # sum if vector action
         pnl_net_t = pnl_t - tc  # subtract cost # maximize pnl
-        loss_policy = -pnl_net_t.mean()  # maximize pnl
         pnl_scalar = float(pnl_net_t.detach().cpu().numpy().squeeze())
-        pnls.append(pnl_scalar)
-        prev_action = action_t.detach().clone()  # store detached value
+        cumulative_pnl += pnl_scalar
+
+        # STOP-LOSS CHECK
+        stop_triggered = False
+        if cumulative_pnl <= stop_loss_threshold:
+            pnl_scalar -= abs(stop_loss_penalty)   # penalize hitting stop-loss
+            action_t = torch.zeros_like(action_t) # force close position
+            stop_triggered = True
+            stop_loss_count += 1
+            cumulative_pnl = 0.0
+
+        portfolio_returns.append(pnl_scalar)
+        prev_action = float(action_t.detach().cpu().numpy().squeeze())
 
         state_returns.append(next_ret)
 
@@ -178,6 +195,7 @@ def evaluate_loop_lstm(
         'rt_mle' : np.array(rt_mle), 
         'cp_flags' : np.array(cp_flags), 
         'recons' : np.array(all_recons), 
-        'pnl' : np.array(pnls) 
+        'portfolio_returns' : np.array(portfolio_returns),
+        'rets': pd.Series(portfolio_returns, index= dates[:len(dates)-1])
     }
     return metrics
