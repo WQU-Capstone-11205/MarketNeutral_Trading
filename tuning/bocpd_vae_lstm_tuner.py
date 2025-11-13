@@ -15,6 +15,7 @@ from util.metrics import evaluate_composite_score
 from ml_dl_models.lstm import LSTMPolicy
 from util.weighted_replay_buffer import WeightedReplayBuffer
 from tuning.bocpd_vae_tuner import BOCPD_VAE_Tuner
+from util.seed_random import seed_random
 
 class BOCPD_VAE_LSTM_Tuner(BOCPD_VAE_Tuner):
     default_lstm_space = {
