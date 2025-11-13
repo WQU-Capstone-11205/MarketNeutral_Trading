@@ -37,7 +37,7 @@ class BOCPD_VAE_Tuner:
         "hidden_dim": [32, 64, 128, 256],
         "lr": [1e-2, 1e-3, 1e-4],
         "vae_seq_len": [1, 5, 25],
-        "kl_wt": [0.01, 0.05, 0.1]
+        "kl_wt": [0.0005, 0.0001, 0.005, 0.001, 0.01]
     }
 
     best_bocpd_params = {
