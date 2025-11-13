@@ -33,16 +33,18 @@ class BOCPD_VAE_LSTM_Tuner(BOCPD_VAE_Tuner):
 
     best_lstm_params = {
         "z_dim": 16,
-        "hidden_dim": 512,
-        "lr": 5e-6
+        "hidden_dim": 128,
+        "lr": 5e-6,
+        "gamma": 0.99
     }
 
     best_joint_params = {
         "state_window": 25,
         "base_action_sigma": 0.1,
         "wt_multplier": 1.5,
-        "buffer_size_updates": 128,
-        "sample_batch_size": 16
+        "buffer_size_updates": 64,
+        "sample_batch_size": 8,
+        "transaction_cost": 0.001
     }
 
     def __init__(self, custom_bocpd_space: Dict[str, List[Any]]=None,
@@ -66,10 +68,7 @@ class BOCPD_VAE_LSTM_Tuner(BOCPD_VAE_Tuner):
 
     def tune_lstm(self, data, change_probs, cpflags, mus):
         # initialize random seed
-        np.random.seed(42)
-        random.seed(42)
-        torch.manual_seed(42)
-
+        seed_random()
         gamma = 1.0 # currently disabled # 0.99 # discount factor (same as RL)
         transaction_cost = 0.0 # currently disabled # 0.0005,   # optional, small transaction cost per trade
         replay_alpha_cp = 0.6      # weight mix: alpha*cp + (1-alpha)*|reward|
@@ -81,9 +80,7 @@ class BOCPD_VAE_LSTM_Tuner(BOCPD_VAE_Tuner):
         for params in self._grid(self.lstm_space):
             state_returns = [0.0]*(state_window-1)
             state_returns.append(data.iloc[0])
-            state_dim = state_window
-
-            policy_lstm = LSTMPolicy(input_dim=state_dim + params['z_dim'], hidden_dim=params['hidden_dim']).to(device)
+            policy_lstm = LSTMPolicy(input_dim=state_window + params['z_dim'], hidden_dim=params['hidden_dim']).to(device)
             opt_policy = optim.Adam(policy_lstm.parameters(), lr=params['lr'])
             rms = RunningMeanStd()
             buffer = WeightedReplayBuffer(capacity=30000)
