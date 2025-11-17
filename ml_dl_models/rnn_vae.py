@@ -36,7 +36,7 @@ class VAEEncoder(nn.Module):
         seed = 42
         g = torch.Generator()
         g.manual_seed(seed)
-        eps = torch.randn_like(mu, generator=g)
+        eps = torch.randn(mu.shape, generator=g, device=mu.device, dtype=mu.dtype)
         return mu + eps * std
 
     def decode(self, z, seq_len=None):
