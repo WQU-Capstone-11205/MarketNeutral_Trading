@@ -30,7 +30,13 @@ class VAEEncoder(nn.Module):
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
+        # changes to make it deterministic
+        # eps = torch.randn_like(std) # commented for deterministic
+        # the following 4 lines added to make deterministic
+        seed = 42
+        g = torch.Generator()
+        g.manual_seed(seed)
+        eps = torch.randn_like(mu, generator=g)
         return mu + eps * std
 
     def decode(self, z, seq_len=None):
