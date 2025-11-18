@@ -252,6 +252,9 @@ def train_loop_trafo(
                 policy_loss = per_sample_loss.mean()
                 total_policy_loss += float(policy_loss.detach().cpu().item())
 
+        if stop_loss_count > 0:
+            print(f"Stop-loss triggered for {stop_loss_count} PnLs")
+        
         avg_recon = total_recon / T
         avg_kl = total_kl / T
         avg_policy = total_policy_loss / T
