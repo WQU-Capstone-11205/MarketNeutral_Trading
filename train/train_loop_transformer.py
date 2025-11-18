@@ -14,10 +14,10 @@ from structural_break.hazard import ConstantHazard
 from structural_break.distribution import StudentT
 from ml_dl_models.rnn_vae import VAEEncoder, vae_loss
 from ml_dl_models.transformer import TransformerModel
-# from util.weighted_replay_buffer import WeightedReplayBuffer
+from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.eval_strategy import evaluate_strategy
 from util.models_io import save_models
-# from util.seed_random import seed_random
+from util.seed_random import seed_random
 
 def train_loop_trafo(
     stream,
