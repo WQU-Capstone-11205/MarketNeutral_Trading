@@ -67,15 +67,31 @@ def vae_plot(input_spread, recon_spread):
   
 def compare_trends_plot(input_spread, results):
     fig, ax1 = plt.subplots(figsize=(12, 5))
-    ax1.plot(input_spread.index, input_spread, label='Distance Spread', color='gray')
+
+    # --- compute common limits ---
+    y_min = min(input_spread.min(), np.min(results))
+    y_max = max(input_spread.max(), np.max(results))
+
+    # --- plot distance spread ---
+    ax1.plot(input_spread.index, input_spread, label='Spread', color='gray')
     ax1.set_ylabel('USD/pair trading', color='gray')
     ax1.tick_params(axis='y', labelcolor='gray')
+
+    # Set unified scale
+    ax1.set_ylim(y_min, y_max)
+
+    # --- secondary axis (same scale) ---
     ax2 = ax1.twinx()
     ax2.plot(input_spread.index[:-1], results, label='Profit & Loss', color='blue')
     ax2.set_ylabel('USD/pair trading', color='blue')
     ax2.tick_params(axis='y', labelcolor='blue')
+
+    # Make ax2 use the same limits
+    ax2.set_ylim(y_min, y_max)
+
     ax1.set_xlabel('Date')
-    plt.title('Profit & Loss (results) vs Distance Spread (input)')
+    plt.title('Profit & Loss (results) vs Spread (input)')
+
     fig.legend(loc="upper right", bbox_to_anchor=(1,1), bbox_transform=ax1.transAxes)
     plt.show()
 
