@@ -42,7 +42,7 @@ def compute_max_drawdown(equity_curve):
       # Compute running maximum
       running_max = np.maximum.accumulate(equity_curve)
       # Compute drawdowns
-      drawdowns = (running_max - equity_curve) # / (running_max + 1e-8)
+      drawdowns = (running_max - equity_curve) / (running_max + 1e-8)
       # Maximum drawdown
       mdd = np.max(drawdowns)
       return mdd
