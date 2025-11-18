@@ -14,10 +14,10 @@ from structural_break.hazard import ConstantHazard
 from structural_break.distribution import StudentT
 from ml_dl_models.rnn_vae import VAEEncoder, vae_loss
 from ml_dl_models.transformer import TransformerModel
-from util.weighted_replay_buffer import WeightedReplayBuffer
+# from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.eval_strategy import evaluate_strategy
 from util.models_io import save_models
-from util.seed_random import seed_random
+# from util.seed_random import seed_random
 
 def train_loop_trafo(
     stream,
@@ -30,24 +30,27 @@ def train_loop_trafo(
     total_steps=10000,
     device='cpu',
     stop_loss_threshold=-0.02,
-    stop_loss_penalty=0.001
+    stop_loss_penalty=0.001,
+    seed: int = 42
 ):
-    seed_random()
+    # seed once before model construction and data setup
+    seed_random(seed, device=device)
+
     state_window=joint_params['state_window']
     seq_len_for_vae=vae_params['vae_seq_len']
     bocpd_hazard=bocpd_params['hazard']
-    replay_alpha_cp = 0.6      # weight mix: alpha*cp + (1-alpha)*|reward|
-    # transaction cost: proportional to change in action magnitude
+    replay_alpha_cp = 0.6
     tc = joint_params.get('transaction_cost', 0.0)
 
     # ----- Data setup -----
     if isinstance(stream, pd.Series):
-        data = stream.values  # just the spread values
-        dates = stream.index    # keep dates for later if you want plotting
+        data = stream.values
+        dates = stream.index
     else:
         data = np.asarray(stream)
         dates = None
 
+    # (BOCPD, encoder, transformer initialization unchanged)
     bocpd = BOCPD(
                   ConstantHazard(bocpd_hazard),
                   StudentT(
@@ -58,6 +61,7 @@ def train_loop_trafo(
                     )
             )
 
+    # IMPORTANT: model parameter initialization must be deterministic too (we already seeded above).
     encoder = VAEEncoder(
                 input_dim=vae_params['input_dim'],
                 hidden_dim=vae_params['hidden_dim'],
@@ -84,11 +88,15 @@ def train_loop_trafo(
 
     # ----- Training loop -----
     for epoch in range(num_epochs):
-        # action noise base sigma
+        # reseed per-epoch so runs are reproducible and deterministic across epochs
+        # we use deterministic offset seeds so all randomness is identical for same seed value
+        epoch_seed = seed + epoch
+        seed_random(epoch_seed, device=device)
+
         base_action_sigma = joint_params['base_action_sigma']
         T = min(total_steps, len(data) - 1)
 
-        # initialize state: last `state_window` returns
+        # initialize state
         state_returns = [0.0]*(state_window-1)
         state_returns.append(data[0])
         vae_state_diff = np.array([0.0]*seq_len_for_vae)
@@ -101,6 +109,20 @@ def train_loop_trafo(
         stop_loss_count = 0
 
         for step in trange(T):
+            # reseed per-step for any sampling/noise used during step
+            step_seed = epoch_seed + step + 1000
+            # PyTorch generator for randn-like draws (per-device)
+            if device.startswith("cuda") and torch.cuda.is_available():
+                gen = torch.Generator(device='cuda')
+            else:
+                gen = torch.Generator(device='cpu')
+            gen.manual_seed(step_seed)
+
+            # keep numpy and python random deterministic for any sampling inside this step (e.g., buffer pushes)
+            np.random.seed(step_seed)
+            random.seed(step_seed)
+            torch.manual_seed(step_seed)  # ensures CPU-side rng deterministic for code that uses torch.randn()
+
             cur_ret = data[step]
             rms.update([cur_ret])
             norm_ret = float((cur_ret - rms.mean) / (math.sqrt(rms.var) + 1e-8))
@@ -109,56 +131,51 @@ def train_loop_trafo(
             change_prob, cp_flag = bocpd.update(norm_ret)
 
             # --- Encoder (VAE) and Policy (Transformer) Input ---
-            # build encoder input sequence (seq_len_for_vae)
-            # form encoder/policy input: (seq_len, input_dim_vae) where input_dim_vae = [norm_ret, change_prob]
-            # We need the historical change probabilities for the sequence input to the VAE/Policy
-            # This requires storing past change probabilities or recomputing them for the sequence.
-
             seq_start = max(0, step - seq_len_for_vae + 1)
             seq_rets = data[seq_start: step + 1]
             cp_probs.append(change_prob)
-            cps_seq = cp_probs[seq_start: step + 1] ####
-            # pad if needed
+            cps_seq = cp_probs[seq_start: step + 1]
             if len(seq_rets) < seq_len_for_vae:
                 pad = np.zeros(seq_len_for_vae - len(seq_rets))
                 seq_rets = np.concatenate([pad, seq_rets])
-                cps_pad = np.zeros(seq_len_for_vae - len(cps_seq)) ####
-                cps_seq = np.concatenate([cps_pad, cps_seq]) ####
+                cps_pad = np.zeros(seq_len_for_vae - len(cps_seq))
+                cps_seq = np.concatenate([cps_pad, cps_seq])
 
-            # Simplified seq_inp using current change_prob (less accurate but matches original VAE input approach)
-            # form encoder input: (seq_len, seq_diff, input_dim) where input_dim = [norm_ret, change_prob]
             seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8),
-                                  cps_seq ], axis=-1)[None, ...]  # batch=1 # (1, seq_len_for_vae, input_dim_vae)
+                                  cps_seq ], axis=-1)[None, ...]
             seq_inp_t = torch.tensor(seq_inp, dtype=torch.float32).to(device)
-            # # --- VAE encoder ---
+
+            # --- VAE encoder ---
+            # If the VAE uses torch.randn inside, the manual seed above ensures deterministic draws.
             x_hat, mu, logvar, z_t = encoder(seq_inp_t)
             loss_vae, recon_loss, kl_loss = vae_loss(seq_inp_t, x_hat, mu, logvar, kl_weight=vae_params['kl_wt'])
             opt_vae.zero_grad(); loss_vae.backward(); opt_vae.step()
 
             # --- Policy (Transformer) ---
-            # Pass the sequence input and the latent variable to the Transformer model
-            z_t = z_t.detach().squeeze(0)   # (16,)
+            z_t = z_t.detach().squeeze(0)
             z_expand = z_t.unsqueeze(0).unsqueeze(1).repeat(1, seq_len_for_vae, 1)
-            full_input = torch.cat([seq_inp_t, z_expand], dim=-1)   # (1, seq_len, input_dim + z_dim)
+            full_input = torch.cat([seq_inp_t, z_expand], dim=-1)
             action_t = torch.tanh(transformer(full_input))
+
             # exploration scale increases with change_prob
-            noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob)  # alpha=5 scaling
-            # action_t = action_t + np.random.normal(scale=noise_sigma, size=action_t.shape)
-            action_t = action_t + torch.randn_like(action_t).detach() * noise_sigma
+            noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob)
+
+            # deterministic noise draw using generator
+            # note: torch.randn_like accepts generator=<gen>
+            # noise = torch.randn_like(action_t, generator=gen) * noise_sigma
+            noise = torch.randn(action_t.shape, generator=gen, device=action_t.device, dtype=action_t.dtype)
+            action_t = action_t + noise
             action_t = torch.clamp(action_t, -1.0, 1.0)
 
             reward = data[step + 1] - cur_ret
-            # --- PnL computation (with gradient flow) ---
             reward_t = torch.tensor([reward], dtype=torch.float32, device=device)
             pnl_t = action_t * reward_t
-            # normalize reward by volatility and include transaction costs
-            eps = 1e-8
-            pnl_t_norm = pnl_t / (math.sqrt(rms.var) + eps)          # delta spread × position
-            trans_cost = float(tc * torch.abs(action_t - prev_action).item())
-            pnl_net_t = pnl_t_norm - trans_cost  # subtract cost # maximize pnl
 
-            # entropy-like penalty, This discourages the LSTM from pushing
-            # outputs to extremes (−1 or +1) unless strongly justified
+            eps = 1e-8
+            pnl_t_norm = pnl_t / (math.sqrt(rms.var) + eps)
+            trans_cost = float(tc * torch.abs(action_t - prev_action).item())
+            pnl_net_t = pnl_t_norm - trans_cost
+
             entropy_reg = - (action_t * torch.log(torch.abs(action_t) + 1e-8)).mean()
             loss_policy = -pnl_net_t.mean() - 1e-3 * entropy_reg
 
@@ -176,8 +193,8 @@ def train_loop_trafo(
             # STOP-LOSS CHECK
             stop_triggered = False
             if cumulative_pnl <= stop_loss_threshold:
-                pnl_scalar -= abs(stop_loss_penalty)   # penalize hitting stop-loss
-                action_t = torch.zeros_like(action_t) # force close position
+                pnl_scalar -= abs(stop_loss_penalty)
+                action_t = torch.zeros_like(action_t)
                 stop_triggered = True
                 stop_loss_count += 1
                 cumulative_pnl = 0.0
@@ -189,22 +206,26 @@ def train_loop_trafo(
             w_cp = float(change_prob)
             w_ret = abs(pnl_scalar)
             weight = float(replay_alpha_cp * w_cp + (1.0 - replay_alpha_cp) * w_ret + 1e-8)
-            # --- Store transition in buffer (for future stability) ---
+
+            # --- Store transition in buffer ---
             buffer.push(seq_inp.squeeze(0).astype(np.float32),
                         float(action_t.detach().cpu().numpy().squeeze()),
-                        float(pnl_scalar), #.item(),
+                        float(pnl_scalar),
                         None,
                         False,
                         weight,
                         None
                     )
 
-            # Upweight near detected changes
             if cp_flag == 1:
                 buffer.upweight_recent(window=200, multiplier=1.8)
 
-            # periodic updates
+            # periodic updates (make sampling deterministic by reseeding right before sample)
             if ((buffer.size() >= joint_params['buffer_size_updates']) and (step % 8 == 0)):
+                # reseed numpy/random before sampling to ensure consistent sampled indices
+                np.random.seed(step_seed + 12345)
+                random.seed(step_seed + 12345)
+
                 batch = buffer.sample(joint_params['sample_batch_size'])
 
                 # prepare tensors
@@ -216,13 +237,12 @@ def train_loop_trafo(
 
                 # compute predicted actions and weighted loss (policy)
                 with torch.no_grad():
-                    z_placeholder = torch.zeros(states.size(0), trafo_params['z_dim'], device=device)  # if you want to include z, adapt
+                    z_placeholder = torch.zeros(states.size(0), trafo_params['z_dim'], device=device)
                 z_placeholder_expand = z_placeholder.unsqueeze(1).repeat(1, seq_len_for_vae, 1)
                 states_full_input = torch.cat([states, 8 * z_placeholder_expand], dim=-1)
                 pred_actions = torch.tanh(transformer(states_full_input))
 
-                # policy loss: -pred_actions * reward (we want actions that produce positive reward)
-                per_sample_loss = - (pred_actions * rewards)  # (N,1)
+                per_sample_loss = - (pred_actions * rewards)
                 weighted_loss = (per_sample_loss * sample_weights_t).mean()
 
                 opt_policy.zero_grad()
@@ -232,20 +252,15 @@ def train_loop_trafo(
                 policy_loss = per_sample_loss.mean()
                 total_policy_loss += float(policy_loss.detach().cpu().item())
 
-        avg_recon = total_recon / T # Use T as the number of steps
+        avg_recon = total_recon / T
         avg_kl = total_kl / T
         avg_policy = total_policy_loss / T
         print(f"Epoch {epoch:03d} | recon={avg_recon:.4f} | kl={avg_kl:.4f} | policy={avg_policy:.4f}")
 
-        # ============================================================
-        #   Save models for best Sharpe ratio
-        # ============================================================
-        # Evaluate strategy on the PnL generated during training for this epoch
-        val_metrics = evaluate_strategy(portfolio_returns[seq_len_for_vae:]) # Evaluate PnL after the initial sequence
+        val_metrics = evaluate_strategy(portfolio_returns[seq_len_for_vae:])
         val_sharpe = val_metrics["sharpe_ratio"]
         print(f"Train Epoch Sharpe={val_sharpe:.3f}")
 
-        # --- save best checkpoint ---
         if val_sharpe > best_val_sharpe:
             best_val_sharpe = val_sharpe
             meta = {"epoch": epoch, "recon loss": avg_recon, "kl loss": avg_kl, "train_sharpe": val_sharpe}
