@@ -98,7 +98,7 @@ def compare_trends_plot(input_spread, results):
 def drawdown_plot(returns):
     cum_pnl = np.cumsum(returns)
     rolling_max = np.maximum.accumulate(cum_pnl)
-    drawdown = (rolling_max - cum_pnl) # / (rolling_max + 1e-8)
+    drawdown = (rolling_max - cum_pnl) / (rolling_max + 1e-8)
     plt.plot(returns.index, drawdown, label="Profit & Loss", color="blue")
     plt.xlabel("Date")
     plt.ylabel("Drawdown")
