@@ -81,11 +81,16 @@ def train_loop_trafo(
 
     opt_policy = optim.Adam(transformer.parameters(), lr=trafo_params['lr'])
 
-    best_val_sharpe = -np.inf
     gamma = trafo_params.get("gamma", 0.99)
     buffer = WeightedReplayBuffer(capacity=20000)
     rms = RunningMeanStd()
-
+    # EARLY STOPPING PARAMETERS
+    patience = trafo_params.get("patience", 5)
+    min_delta = trafo_params.get("min_delta", 1e-4)
+    es_counter = 0
+    best_val_sharpe = -np.inf
+    stopped_early = False
+    
     # ----- Training loop -----
     for epoch in range(num_epochs):
         # reseed per-epoch so runs are reproducible and deterministic across epochs
@@ -264,14 +269,26 @@ def train_loop_trafo(
         val_sharpe = val_metrics["sharpe_ratio"]
         print(f"Train Epoch Sharpe={val_sharpe:.3f}")
 
-        if val_sharpe > best_val_sharpe:
+        if val_sharpe > best_val_sharpe + min_delta:
             best_val_sharpe = val_sharpe
+            es_counter = 0  # reset patience counter
             meta = {"epoch": epoch, "recon loss": avg_recon, "kl loss": avg_kl, "train_sharpe": val_sharpe}
             bocpd_cfg = {"bocpd_hazard": bocpd_hazard}
             save_models(save_dir, transformer, encoder, opt_policy, opt_vae, bocpd_cfg, meta)
             print(f"Saved best models at epoch {epoch:03d} (Train Sharpe={val_sharpe:.3f})")
+        else:
+            es_counter += 1
+            print(f"No improvement. Early stopping patience counter = {es_counter}/{patience}")
+            if es_counter >= patience:
+                print(f"EARLY STOPPING TRIGGERED at epoch {epoch}")
+                stopped_early = True
+                break
 
     np.savez(os.path.join(save_dir, "rms_stats.npz"), mean=rms.mean, var=rms.var)
+    if stopped_early:
+        print("Training stopped early due to no improvement in Sharpe.")
+    else:
+        print("Training completed all epochs.")
     print("Transformer policy training complete.")
 
 # # Optional: quick test
