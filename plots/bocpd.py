@@ -103,5 +103,22 @@ def drawdown_plot(returns):
     plt.xlabel("Date")
     plt.ylabel("Drawdown")
     plt.legend()
-    plt.title("Portfolio returns drawdown (BOCPD+VAE+RL)")
+    plt.title("Portfolio returns drawdown")
+    plt.show()
+
+def compare_drawdown_plot(spread_returns, pnl_returns):
+    cum_spread = np.cumsum(spread_returns)
+    rolling_max_spread = np.maximum.accumulate(cum_spread)
+    drawdown_spread = (rolling_max_spread - cum_spread) / (rolling_max_spread + 1e-8)
+    
+    cum_pnl = np.cumsum(pnl_returns)
+    rolling_max_pnl = np.maximum.accumulate(cum_pnl)
+    drawdown_pnl = (rolling_max_pnl - cum_pnl) / (rolling_max_pnl + 1e-8)
+    
+    plt.plot(drawdown_spread, label="Spread", color="red")
+    plt.plot(drawdown_pnl, label="Profit & Loss", color="blue")
+    plt.xlabel("Date")
+    plt.ylabel("Drawdown")
+    plt.legend()
+    plt.title("Input spread vs Portfolio returns Drawdown")
     plt.show()
