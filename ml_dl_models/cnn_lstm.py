@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.optim as optim
 
 class CNNLSTMModel(nn.Module):
     # Add z_dim and seq_len to init
@@ -84,3 +85,16 @@ class CNNLSTMModel(nn.Module):
         action = self.fc(combined_features) # (batch, 1) or (batch,) depending on FC output
 
         return action.squeeze(-1) # Ensure output is (batch,) or (batch, 1)
+
+def build_optimizer(model, optimizer_name="Adam", lr=1e-3, weight_decay=0.0):
+    """
+    Factory function to build an optimizer based on a string name.
+    """
+    if optimizer_name.lower() == "adam":
+        return optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    elif optimizer_name.lower() == "adamw":
+        return optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    elif optimizer_name.lower() == "sgd":
+        return optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
+    else:
+        raise ValueError(f"Unknown optimizer: {optimizer_name}")
