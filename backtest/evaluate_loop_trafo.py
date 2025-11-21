@@ -103,6 +103,7 @@ def evaluate_loop_trafo(
     all_recons = []
     portfolio_returns = []
     cp_probs = []
+    actions = []
     capital = 1.0
     transaction_cost = joint_params.get('transaction_cost', 0.0)
     eps = 1e-8
@@ -196,6 +197,7 @@ def evaluate_loop_trafo(
 
         portfolio_returns.append(pnl_scalar)
         prev_action = float(action_t.detach().cpu().numpy().squeeze())
+        actions.append(prev_action)
 
     change_probs, rt_mle, cp_flags = bocpd.results
     all_recons.append(all_recons[-1])
@@ -210,6 +212,7 @@ def evaluate_loop_trafo(
         'rt_mle' : np.array(rt_mle),
         'cp_flags' : np.array(cp_flags),
         'recons' : np.array(all_recons),
+        'actions' : np.array(actions),
         'portfolio_returns' : np.array(portfolio_returns),
         'rets': pd.Series(portfolio_returns, index= dates[:len(dates)-1]) if dates is not None else pd.Series(portfolio_returns)
     }
