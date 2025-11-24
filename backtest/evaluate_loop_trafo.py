@@ -199,6 +199,9 @@ def evaluate_loop_trafo(
         prev_action = float(action_t.detach().cpu().numpy().squeeze())
         actions.append(prev_action)
 
+    if stop_loss_count > 0:
+        print(f"Stop-loss triggered for {stop_loss_count} PnLs")
+
     change_probs, rt_mle, cp_flags = bocpd.results
     all_recons.append(all_recons[-1])
     rmse_ch0 = float(np.sqrt(np.mean(errors_ch0)))
