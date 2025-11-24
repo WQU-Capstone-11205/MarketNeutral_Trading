@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from tqdm import trange
 import torch.optim as optim
 import math
+import random
 
 from util.running_mean_std import RunningMeanStd
 from util.seed_random import seed_random
@@ -33,7 +34,8 @@ def evaluate_loop_rl(
           device="cpu",
           exploration=False,
           stop_loss_threshold=-0.02, #same stop-loss threshold as training (e.g., −2%)
-          stop_loss_penalty=0.001    # optional penalty for hitting stop-loss
+          stop_loss_penalty=0.001,    # optional penalty for hitting stop-loss
+          seed: int = 42
 ):
     if isinstance(stream, pd.Series):
         data = stream.values  # just the spread values
@@ -41,9 +43,10 @@ def evaluate_loop_rl(
     else:
         data = np.asarray(stream)
         dates = None
-    seed_random()
+    seed_random(seed, device=device)
     state_window = joint_params['state_window']
     seq_len_for_vae = vae_params['vae_seq_len']
+    tc = joint_params.get('transaction_cost', 0.0)
     state_dim = state_window
 
     vae_encoder = VAEEncoder(
@@ -102,7 +105,7 @@ def evaluate_loop_rl(
     T = min(total_steps, len(data) - 1)
 
     # initialize state: last `state_window` returns
-    state_returns = [data[0]]*(state_window-1)
+    state_returns = [0.0]*(state_window-1)
     state_returns.append(data[0])
     vae_state_diff = np.array([0.0]*seq_len_for_vae)
     last_action = 0.0
@@ -116,12 +119,33 @@ def evaluate_loop_rl(
     equity_curve = []
     capital = 1.0
     cp_probs = []
-    tc = joint_params.get('transaction_cost', 0.0)
+    eps = 1e-8
     cumulative_pnl = 0.0          # track total PnL
     stop_loss_count = 0
+    
+    global_mean = 0.0
+    global_var = 0.0
+    recon_probs = []
+    errors_ch0 = []
+    errors_ch1 = []
+
     for step in trange(T):
+        # reseed at each step to ensure deterministic behavior
+        step_seed = seed + step + 2000
+        if device.startswith("cuda") and torch.cuda.is_available():
+            gen = torch.Generator(device='cuda')
+        else:
+            gen = torch.Generator(device='cpu')
+        gen.manual_seed(step_seed)
+
+        np.random.seed(step_seed)
+        random.seed(step_seed)
+        torch.manual_seed(step_seed)
+              
         cur_ret = data[step]
         rms.update([cur_ret])
+        global_mean = rms.mean
+        global_var = rms.var
         # BOCPD expects scalar observation -> use normalized return
         norm_ret = float((cur_ret - rms.mean) / (math.sqrt(rms.var) + 1e-8))
         change_prob, _ = bocpd.update(norm_ret)  # float in [0,1]
@@ -149,10 +173,20 @@ def evaluate_loop_rl(
         with torch.no_grad():
             x_hat, mu, logvar, z_t = vae_encoder(seq_inp_t)
             recon_np = x_hat.detach().cpu().numpy()[0, :, 0]  # seq_len values
+            recon_cp = x_hat.detach().cpu().numpy()[0, :, 1]
             # take last timestep reconstruction (corresponds to current idx)
             recon_last_norm = recon_np[-1]
             recon_last_denorm = recon_last_norm * math.sqrt(rms.var) + rms.mean
             all_recons.append(recon_last_denorm)
+            recon_cp_last_norm = recon_cp[-1]
+            recon_probs.append(recon_cp_last_norm)
+
+            inp_ch0 = cur_ret
+            recon_ch0 = recon_last_denorm
+            inp_ch1 = change_prob
+            recon_ch1 = recon_cp_last_norm
+            errors_ch0.append(np.mean((inp_ch0 - recon_ch0)**2))
+            errors_ch1.append(np.mean((inp_ch1 - recon_ch1)**2))
 
         # ---- BOCPD-based gating ----
         noise_scale = 0.05 * (1.0 + 5.0 * change_prob)  # increase noise if break detected
@@ -211,12 +245,18 @@ def evaluate_loop_rl(
 
     change_probs, rt_mle, cp_flags = bocpd.results
     all_recons.append(all_recons[-1])
+    rmse_ch0 = float(np.sqrt(np.mean(errors_ch0)))
+    rmse_ch1 = float(np.sqrt(np.mean(errors_ch1)))
+    print(f"\nRMSE channel0 (spread, denorm): {rmse_ch0:.6f}")
+    print(f"RMSE channel1 (cp prob):        {rmse_ch1:.6f}")
+
     print("Evaluation complete.")
     metrics = {
                 'change_probs' : np.array(change_probs),
                 'rt_mle' : np.array(rt_mle),
                 'cp_flags' : np.array(cp_flags),
                 'recons' : np.array(all_recons),
+                'actions' : np.array(actions),
                 'portfolio_returns' : np.array(portfolio_returns),
                 'equity_curve' : np.array(equity_curve),
                 'pnl' : np.array(pnl),
