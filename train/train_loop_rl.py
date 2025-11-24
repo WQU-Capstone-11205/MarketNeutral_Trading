@@ -37,8 +37,10 @@ def train_loop_rl(
     device='cpu',
     stop_loss_threshold=-0.02,
     stop_loss_penalty=0.001,
+    seed: int = 42
 ):
-    seed_random()
+    seed_random(seed, device=device)
+    
     state_window=joint_params['state_window']
     seq_len_for_vae=vae_params['vae_seq_len']
     bocpd_hazard=bocpd_params['hazard']
@@ -84,14 +86,23 @@ def train_loop_rl(
     actor_opt = optim.Adam(actor.parameters(), lr=rl_params['lr'])
     critic_opt = optim.Adam(critic.parameters(), lr=rl_params['lr'])
     opt_vae = optim.Adam(encoder.parameters(), lr=vae_params['lr'])
-    best_val_sharpe = -np.inf
     gamma = rl_params.get("gamma", 0.99)
     buffer = WeightedReplayBuffer(capacity=20000)
     rms = RunningMeanStd()
-
+    # EARLY STOPPING PARAMETERS
+    patience = trafo_params.get("patience", 5)
+    min_delta = trafo_params.get("min_delta", 1e-4)
+    es_counter = 0
+    best_val_sharpe = -np.inf
+    stopped_early = False
+    
     # training loop
     for epoch in range(num_epochs):
-
+        # reseed per-epoch so runs are reproducible and deterministic across epochs
+        # we use deterministic offset seeds so all randomness is identical for same seed value
+        epoch_seed = seed + epoch
+        seed_random(epoch_seed, device=device)
+        
         # action noise base sigma
         base_action_sigma = joint_params['base_action_sigma']
         # walkthrough
@@ -110,6 +121,20 @@ def train_loop_rl(
         stop_loss_count = 0
 
         for step in trange(T):
+            # reseed per-step for any sampling/noise used during step
+            step_seed = epoch_seed + step + 1000
+            # PyTorch generator for randn-like draws (per-device)
+            if device.startswith("cuda") and torch.cuda.is_available():
+                gen = torch.Generator(device='cuda')
+            else:
+                gen = torch.Generator(device='cpu')
+            gen.manual_seed(step_seed)
+
+            # keep numpy and python random deterministic for any sampling inside this step (e.g., buffer pushes)
+            np.random.seed(step_seed)
+            random.seed(step_seed)
+            torch.manual_seed(step_seed)  # ensures CPU-side rng deterministic for code that uses torch.randn()
+            
             cur_ret = data[step]
             rms.update([cur_ret])
             # BOCPD expects scalar observation -> use normalized return
