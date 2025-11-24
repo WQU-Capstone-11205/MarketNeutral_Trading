@@ -1,6 +1,7 @@
 # train_loop.py
 import torch
 import torch.nn as nn
+import torch.optim as optim
 import numpy as np
 import os, json
 import matplotlib.pyplot as plt
@@ -22,6 +23,7 @@ from ml_dl_models.actor_critic import Critic
 from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.eval_strategy import evaluate_strategy
 from util.models_io import save_RLmodels
+from util.seed_random import seed_random
 
 def train_loop_rl(
     stream,
