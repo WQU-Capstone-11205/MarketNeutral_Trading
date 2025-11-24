@@ -91,8 +91,8 @@ def train_loop_rl(
     buffer = WeightedReplayBuffer(capacity=20000)
     rms = RunningMeanStd()
     # EARLY STOPPING PARAMETERS
-    patience = trafo_params.get("patience", 5)
-    min_delta = trafo_params.get("min_delta", 1e-4)
+    patience = rl_params.get("patience", 5)
+    min_delta = rl_params.get("min_delta", 1e-4)
     es_counter = 0
     best_val_sharpe = -np.inf
     stopped_early = False
