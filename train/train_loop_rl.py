@@ -44,6 +44,7 @@ def train_loop_rl(
     state_window=joint_params['state_window']
     seq_len_for_vae=vae_params['vae_seq_len']
     bocpd_hazard=bocpd_params['hazard']
+   
     if isinstance(stream, pd.Series):
         data = stream.values  # just the spread values
         dates = stream.index    # keep dates for later if you want plotting
@@ -213,7 +214,7 @@ def train_loop_rl(
             trans_cost = tc * float(np.abs(action - last_action).sum())  # sum if vector action
             reward = reward - trans_cost
             portfolio_returns.append(reward)
-            
+
             # store transition in buffer with initial weight 1.0
             buffer.push(
                 state_norm.astype(np.float32),
@@ -233,6 +234,10 @@ def train_loop_rl(
 
             # periodic updates
             if buffer.size() >= joint_params['buffer_size_updates'] and step % 8 == 0:
+                # reseed numpy/random before sampling to ensure consistent sampled indices
+                np.random.seed(step_seed + 12345)
+                random.seed(step_seed + 12345)
+
                 batch = buffer.sample(joint_params['sample_batch_size'])
 
                 # prepare tensors for actor/critic
@@ -276,9 +281,9 @@ def train_loop_rl(
 
         if (epoch + 1) == num_epochs:
             print()
-        avg_recon = total_recon / len(data)
-        avg_kl = total_kl / len(data)
-        avg_policy = total_policy_loss / len(data)
+        avg_recon = total_recon / T
+        avg_kl = total_kl / T
+        avg_policy = total_policy_loss / T
         print(f"Epoch {epoch:03d} | recon loss = {avg_recon:.4f} | kl loss = {avg_kl:.4f} | policy loss = {avg_policy:.4f}")
 
         # ============================================================
@@ -290,17 +295,29 @@ def train_loop_rl(
         print(f"Sharpe ={val_sharpe:.3f}")
 
         # --- save best checkpoint ---
-        if val_sharpe > best_val_sharpe:
+        if val_sharpe > best_val_sharpe + min_delta:
             best_val_sharpe = val_sharpe
+            es_counter = 0  # reset patience counter
             meta = {"epoch": epoch, "recon loss": (avg_recon), "kl loss": (avg_kl), "policy loss" : (avg_policy)}
             bocpd_cfg = {"bocpd_hazard": bocpd_hazard}
             save_RLmodels(save_dir, actor, critic, encoder,
                             actor_opt, critic_opt, opt_vae,
                             bocpd_cfg, meta)
             print(f"Saved best models at epoch {epoch:03d} (Sharpe={val_sharpe:.3f})")
+        else:
+            es_counter += 1
+            print(f"No improvement. Early stopping patience counter = {es_counter}/{patience}")
+            if es_counter >= patience:
+                print(f"EARLY STOPPING TRIGGERED at epoch {epoch}")
+                stopped_early = True
+                break
 
     np.savez(os.path.join(save_dir, "rms_stats.npz"), mean=rms.mean, var=rms.var)
-    print("Training complete.")
+    if stopped_early:
+        print("Training stopped early due to no improvement in Sharpe.")
+    else:
+        print("Training completed all epochs.")
+    print("RL policy training complete.")
 
 # # Optional: quick test
 # if __name__ == "__main__":
