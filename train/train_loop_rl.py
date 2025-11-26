@@ -245,7 +245,7 @@ def train_loop_rl(
                 actions = torch.tensor(np.stack([b.action for b in batch]), dtype=torch.float32).to(device)
                 rewards = torch.tensor(np.stack([b.reward for b in batch]), dtype=torch.float32).unsqueeze(-1).to(device)
                 next_states = torch.tensor(np.stack([b.next_state for b in batch]), dtype=torch.float32).to(device)
-                gamma = 0.99 # rl_params.get('gamma', 0.99)
+                
                 # critic update
                 values = critic(states, torch.zeros(states.size(0), rl_params['state_dim']).to(device))  # critic input placeholder z
 
