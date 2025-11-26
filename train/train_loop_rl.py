@@ -96,7 +96,16 @@ def train_loop_rl(
     es_counter = 0
     best_val_sharpe = -np.inf
     stopped_early = False
-    
+
+    # CHANGED: reward-shaping hyperparams (tunable via rl_params or joint_params)
+    cp_weight = rl_params.get("cp_weight", 1.0)           # multiplies reward when change_prob high
+    var_penalty = rl_params.get("var_penalty", 0.25)      # penalty * recent variance
+    dd_penalty = rl_params.get("dd_penalty", 2.0)         # penalty multiplier for drawdown exceed
+    dd_thr = rl_params.get("dd_threshold", 0.10)         # acceptable drawdown before penalty
+    var_window = rl_params.get("var_window", 20)         # window for recent var
+    tc_scale = joint_params.get("tc_scale", 0.3)         # scale for transaction cost (reduce penalty) # CHANGED
+    exploration_alpha = joint_params.get("exploration_alpha", 10.0)  # CHANGED: was 5.0 before
+
     # training loop
     for epoch in range(num_epochs):
         # reseed per-epoch so runs are reproducible and deterministic across epochs
@@ -119,6 +128,7 @@ def train_loop_rl(
         total_recon, total_kl, total_policy_loss = 0, 0, 0
         cp_probs = []
         cumulative_pnl = 0.0
+        peak_pnl = 0.0   # CHANGED: track peak for drawdown computation
         stop_loss_count = 0
 
         for step in trange(T):
@@ -185,7 +195,7 @@ def train_loop_rl(
                 z_t_det = mu.detach() # z_t
                 action_mean = actor(state_t, z_t_det).cpu().numpy().squeeze()
             # exploration scale increases with change_prob
-            noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob)  # alpha=5 scaling
+            noise_sigma = base_action_sigma * (1.0 + exploration_alpha * change_prob)  # alpha=5 scaling
             action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
             action = np.clip(action, -1.0, 1.0)
             next_ret = data[step + 1]
@@ -195,7 +205,38 @@ def train_loop_rl(
             # normalize reward by volatility and include transaction costs
             eps = 1e-8
             raw_reward = float(action * (next_ret - cur_ret))          # delta spread × position
-            reward = raw_reward / (math.sqrt(rms.var) + eps)
+            # base normalized reward
+            base_reward = raw_reward / (math.sqrt(rms.var) + eps)
+
+            # CHANGED: compute recent rolling variance for variance penalty
+            if len(portfolio_returns) >= 2:
+                recent_window = max(1, min(var_window, len(portfolio_returns)))
+                rolling_var = float(np.var(portfolio_returns[-recent_window:]))
+            else:
+                rolling_var = float(rms.var)  # fallback
+
+            # CHANGED: apply cp-weighting, variance penalty, drawdown penalty, and scale transaction cost
+            # cp amplification
+            reward = base_reward * (1.0 + cp_weight * change_prob)  # CHANGED: amplify reward when CP high
+
+            # drawdown bookkeeping BEFORE applying stop-loss
+            # cumulative_pnl currently tracks normalized rewards sum
+            # update peak for drawdown calc
+            if cumulative_pnl > peak_pnl:
+                peak_pnl = cumulative_pnl
+
+            # compute drawdown as fraction of peak (safe denom)
+            if peak_pnl > 1e-8:
+                cur_dd = (peak_pnl - cumulative_pnl) / (abs(peak_pnl) + 1e-8)
+            else:
+                cur_dd = 0.0
+
+            # variance penalty (reduces reward when recent variance high)
+            reward = reward - (var_penalty * rolling_var)  # CHANGED
+
+            # drawdown penalty (only applied when exceeding threshold)
+            if cur_dd > dd_thr:
+                reward = reward - dd_penalty * (cur_dd - dd_thr)  # CHANGED
 
             cumulative_pnl += reward       # track cumulative profit/loss
 
@@ -212,7 +253,9 @@ def train_loop_rl(
             # transaction cost: proportional to change in action magnitude
             tc = joint_params.get('transaction_cost', 0.0)
             trans_cost = tc * float(np.abs(action - last_action).sum())  # sum if vector action
-            reward = reward - trans_cost
+            # CHANGED: scale down effective tc to avoid over-penalizing turnover
+            reward = reward - (tc_scale * trans_cost)  # CHANGED
+            
             portfolio_returns.append(reward)
 
             # store transition in buffer with initial weight 1.0
@@ -264,6 +307,14 @@ def train_loop_rl(
                 # actor update
                 pred_actions = actor(states, torch.zeros(states.size(0), rl_params['state_dim']).to(device))
                 actor_loss = - (pred_actions * adv).mean()
+
+                # CHANGED: optionally add small L2 regularization on policy parameters to avoid collapse (if desired)
+                if rl_params.get('actor_l2', 0.0) > 0.0:
+                    l2_reg = 0.0
+                    for p in actor.parameters():
+                        l2_reg += (p**2).sum()
+                    actor_loss = actor_loss + rl_params['actor_l2'] * l2_reg
+                    
                 actor_opt.zero_grad();
                 actor_loss.backward();
                 torch.nn.utils.clip_grad_norm_(actor.parameters(), 1.0)
