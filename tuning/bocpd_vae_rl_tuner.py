@@ -20,7 +20,13 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         "state_dim": [16],
         "action_dim": [1],
         "hidden_dim": [64, 128, 256, 512],
-        "lr": [1e-4, 5e-5, 1e-5, 5e-6]
+        "lr": [1e-4, 5e-5, 1e-5, 5e-6],
+        "gamma": [0.95, 0.99, 1.0],
+        "cp_weight": [0.05, 0.08, 0.10, 0.15, 0.2],
+        "var_penalty": [1e-5, 5e-4, 1e-4, 5e-3],
+        "var_window": [20, 50, 100],
+        "dd_penalty": [0.10, 0.25, 0.5],
+        "dd_threshold": [0.05, 0.10, 0.2]
     }
 
     default_joint_space = {
@@ -29,14 +35,22 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         "wt_multplier": [1.5, 1.8, 2.0],
         "buffer_size_updates": [16, 64, 128, 256],
         "sample_batch_size": [8, 16, 64, 128],
-        "transaction_cost": [0.001, 0.01, 0.1]
+        "transaction_cost": [0.001, 0.01, 0.1],
+        "tc_scale": [0.2, 0.3, 0.5, 0.8, 1.0],
+        "exploration_alpha": [2.0, 5.0, 6.5, 10.0],
     }
 
     best_rl_params = {
         "state_dim": 16,
         "action_dim": 1,
         "hidden_dim": 64,
-        "lr": 1e-5
+        "lr": 1e-5,
+        "gamma": 0.99,
+        "cp_weight": 0.08,
+        "var_penalty": 1e-5,
+        "var_window": 20,
+        "dd_penalty": 0.0,
+        "dd_threshold": 0.10
     }
 
     best_joint_params = {
@@ -45,7 +59,9 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         "wt_multplier": 2.0,
         "buffer_size_updates": 256,
         "sample_batch_size": 64,
-        "transaction_cost": 0.001
+        "transaction_cost": 0.001,
+        "tc_scale": 1.0,
+        "exploration_alpha": 6.5
     }
 
     def __init__(self, custom_bocpd_space: Dict[str, List[Any]]=None,
@@ -97,7 +113,7 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
                     z_t_det = z_ts[i]
                     action_mean = actor(state_t, z_t_det).cpu().numpy().squeeze()
                 # exploration scale increases with change_prob
-                noise_sigma = base_action_sigma * (1.0 + 5.0 * change_probs[i])  # alpha=5 scaling, cp is now 1D
+                noise_sigma = base_action_sigma * (1.0 + self.best_joint_params['exploration_alpha'] * change_probs[i])  # alpha=5 scaling, cp is now 1D
                 action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
                 action = np.clip(action, -1.0, 1.0)
                 next_ret = data.iloc[i + 1] # Use iloc for pandas Series
@@ -207,7 +223,7 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
                     z_t_det = z_ts[i]
                     action_mean = actor(state_t, z_t_det).cpu().numpy().squeeze()
                 # exploration scale increases with change_prob
-                noise_sigma = base_action_sigma * (1.0 + 5.0 * change_probs[i])  # alpha=5 scaling, cp is now 1D
+                noise_sigma = base_action_sigma * (1.0 + params['exploration_alpha'] * change_probs[i])  # alpha=5 scaling, cp is now 1D
                 action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
                 action = np.clip(action, -1.0, 1.0)
                 next_ret = data.iloc[i + 1] # Use iloc for pandas Series
