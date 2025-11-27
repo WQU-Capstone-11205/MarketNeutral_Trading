@@ -8,11 +8,9 @@ import matplotlib.pyplot as plt
 import math
 import random
 from collections import deque, namedtuple
-import torch.optim as optim
 from tqdm import trange
 import pandas as pd
 
-from util.seed_random import seed_random
 from util.running_mean_std import RunningMeanStd
 from structural_break.bocpd import BOCPD
 from structural_break.hazard import ConstantHazard
@@ -156,7 +154,7 @@ def train_loop_rl(
             seq_start = max(0, step - seq_len_for_vae + 1)
             seq_rets = data[seq_start: step + 1]
             cp_probs.append(change_prob)
-            cps_seq = cp_probs[seq_start: step + 1] ####
+            cps_seq = cp_probs[seq_start: step + 1]
             if step == 0:
                 cur_dif = data[step]
             else:
@@ -166,8 +164,8 @@ def train_loop_rl(
             if len(seq_rets) < seq_len_for_vae:
                 pad = np.zeros(seq_len_for_vae - len(seq_rets))
                 seq_rets = np.concatenate([pad, seq_rets])
-                cps_pad = np.zeros(seq_len_for_vae - len(cps_seq)) ####
-                cps_seq = np.concatenate([cps_pad, cps_seq]) ####
+                cps_pad = np.zeros(seq_len_for_vae - len(cps_seq))
+                cps_seq = np.concatenate([cps_pad, cps_seq]) 
             # form encoder input: (seq_len, seq_diff, input_dim) where input_dim = [norm_ret, change_prob]
             seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8),
                                   cps_seq ], axis=-1)[None, ...]  # batch=1 # (1, seq_len_for_vae, 2)
@@ -213,7 +211,7 @@ def train_loop_rl(
                 recent_window = max(1, min(var_window, len(portfolio_returns)))
                 rolling_var = float(np.var(portfolio_returns[-recent_window:]))
             else:
-                rolling_var = float(rms.var)  # fallback
+                rolling_var = 1e-8  # fallback
 
             # CHANGED: apply cp-weighting, variance penalty, drawdown penalty, and scale transaction cost
             # cp amplification
@@ -232,11 +230,11 @@ def train_loop_rl(
                 cur_dd = 0.0
 
             # variance penalty (reduces reward when recent variance high)
-            reward = reward - (var_penalty * rolling_var)  # CHANGED
+            reward = reward - (var_penalty * rolling_var)
 
             # drawdown penalty (only applied when exceeding threshold)
             if cur_dd > dd_thr:
-                reward = reward - dd_penalty * (cur_dd - dd_thr)  # CHANGED
+                reward = reward - dd_penalty * (cur_dd - dd_thr)
 
             cumulative_pnl += reward       # track cumulative profit/loss
 
@@ -254,7 +252,7 @@ def train_loop_rl(
             tc = joint_params.get('transaction_cost', 0.0)
             trans_cost = tc * float(np.abs(action - last_action).sum())  # sum if vector action
             # CHANGED: scale down effective tc to avoid over-penalizing turnover
-            reward = reward - (tc_scale * trans_cost)  # CHANGED
+            reward = reward - (tc_scale * trans_cost)
             
             portfolio_returns.append(reward)
 
@@ -343,7 +341,7 @@ def train_loop_rl(
         val_metrics = evaluate_strategy(portfolio_returns)
         val_sharpe = val_metrics["sharpe_ratio"]
 
-        print(f"Sharpe ={val_sharpe:.3f}")
+        print(f"Sharpe = {val_sharpe:.3f}")
 
         # --- save best checkpoint ---
         if val_sharpe > best_val_sharpe + min_delta:
