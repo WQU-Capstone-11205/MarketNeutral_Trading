@@ -25,6 +25,7 @@ class BOCPD_VAE_TRAFO_Tuner(BOCPD_VAE_Tuner):
         "num_layers": [1, 2],
         "hidden_dim": [2, 3, 4],
         "lr": [1e-3, 1e-4, 3e-4],
+        "trafo_l2": [1e-3, 1e-4],
         "gamma": [0.8, 0.9, 0.95, 0.99, 1.0]
     }
 
@@ -34,26 +35,29 @@ class BOCPD_VAE_TRAFO_Tuner(BOCPD_VAE_Tuner):
         "wt_multplier": [1.5, 1.8],
         "buffer_size_updates": [16, 64, 128, 256],
         "sample_batch_size": [8, 16, 64, 128],
-        "transaction_cost": [0.001, 0.01, 0.1, 0.2]
+        "transaction_cost": [0.001, 0.01, 0.1, 0.2],
+        "exploration_alpha": [5.0, 6.5, 10.0]
     }
 
     best_trafo_params = {
         "z_dim" : 16,
         "d_model": 32,
         "nhead": 4,
-        "num_layers": 1,
+        "num_layers": 2,
         "hidden_dim": 4, # equivalent to 4*32 = 128
-        "lr": 0.0003,
+        "lr": 0.001,
+        "trafo_l2": 1e-3,
         "gamma": 0.99
     }
 
     best_joint_params = {
         "state_window": 50,
-        "base_action_sigma": 0.01,
+        "base_action_sigma": 0.03,
         "wt_multplier": 1.5,
-        "buffer_size_updates": 64,
-        "sample_batch_size": 16,
-        "transaction_cost": 0.01
+        "buffer_size_updates": 256,
+        "sample_batch_size": 32,
+        "transaction_cost": 0.001,
+        "exploration_alpha": 6.5
     }
 
     def __init__(self, custom_bocpd_space: Dict[str, List[Any]]=None,
