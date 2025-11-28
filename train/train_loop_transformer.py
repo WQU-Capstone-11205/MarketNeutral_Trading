@@ -223,7 +223,7 @@ def train_loop_trafo(
                     )
 
             if cp_flag == 1:
-                buffer.upweight_recent(window=200, multiplier=1.8)
+                buffer.upweight_recent(window=200, multiplier=joint_params['wt_multplier'])
 
             # periodic updates (make sampling deterministic by reseeding right before sample)
             if ((buffer.size() >= joint_params['buffer_size_updates']) and (step % 8 == 0)):
@@ -248,7 +248,15 @@ def train_loop_trafo(
                 pred_actions = torch.tanh(transformer(states_full_input))
 
                 per_sample_loss = - (pred_actions * rewards)
-                weighted_loss = (per_sample_loss * sample_weights_t).mean()
+                # weighted_loss = (per_sample_loss * sample_weights_t).mean()
+                weighted_loss = (per_sample_loss).mean()
+
+                # optionally add small L2 regularization on policy parameters to avoid collapse
+                if trafo_params.get('trafo_l2', 0.0) > 0.0:
+                    l2_reg = 0.0
+                    for p in transformer.parameters():
+                        l2_reg += (p**2).sum()
+                    weighted_loss = weighted_loss + trafo_params['trafo_l2'] * l2_reg
 
                 opt_policy.zero_grad()
                 weighted_loss.backward()
