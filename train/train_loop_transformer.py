@@ -90,6 +90,7 @@ def train_loop_trafo(
     es_counter = 0
     best_val_sharpe = -np.inf
     stopped_early = False
+    exploration_alpha = joint_params.get("exploration_alpha", 10.0)  # CHANGED: was 5.0 before
     
     # ----- Training loop -----
     for epoch in range(num_epochs):
@@ -163,7 +164,7 @@ def train_loop_trafo(
             action_t = torch.tanh(transformer(full_input))
 
             # exploration scale increases with change_prob
-            noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob)
+            noise_sigma = base_action_sigma * (1.0 + exploration_alpha * change_prob)
 
             # deterministic noise draw using generator
             # note: torch.randn_like accepts generator=<gen>
