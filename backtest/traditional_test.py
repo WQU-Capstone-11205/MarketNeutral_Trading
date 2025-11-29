@@ -46,9 +46,7 @@ def backtest_strategy(data, beta, entry_threshold=2, exit_threshold=0.5):
         reward = raw_reward / (math.sqrt(var) + eps)
 
         pnls.append(raw_reward)
-        cum_pnl += raw_reward
-        #rewards.append(reward)
-        cumulative_pnl.append(cum_pnl)
+        rewards.append(reward)
 
     cumulative_pnl = np.cumsum(pnls)
     rewards = pd.Series(rewards, index=data.index[1:])
