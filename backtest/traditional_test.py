@@ -29,16 +29,19 @@ def backtest_strategy(data, beta, entry_threshold=2, exit_threshold=0.5):
         next_ret = spread.iloc[i]
         action = signals.iloc[i - 1]
 
+        # compute return (change in spread)
+        ret = next_ret - cur_ret
+    
         # Update running mean/variance (Welford)
         n += 1
-        delta = cur_ret - rms_mean
+        delta = ret - rms_mean
         rms_mean += delta / n
-        rms_var += delta * (cur_ret - rms_mean)
+        rms_var += delta * (ret - rms_mean)
 
         var = rms_var / max(n - 1, 1)
 
         # RL-style reward: delta spread × position, normalized by variance
-        raw_reward = float(action * (next_ret - cur_ret))
+        raw_reward = float(action * ret)
         reward = raw_reward / (math.sqrt(var) + eps)
 
         cum_pnl += reward
