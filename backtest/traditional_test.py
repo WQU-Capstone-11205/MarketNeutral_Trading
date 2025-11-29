@@ -44,7 +44,7 @@ def backtest_strategy(data, beta, entry_threshold=2, exit_threshold=0.5):
         raw_reward = float(action * ret)
         reward = raw_reward / (math.sqrt(var) + eps)
 
-        cum_pnl += reward
+        cum_pnl += raw_reward
         rewards.append(reward)
         cumulative_pnl.append(cum_pnl)
 
