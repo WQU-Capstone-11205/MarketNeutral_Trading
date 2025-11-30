@@ -12,7 +12,7 @@ This Hybrid model is made of BOCPD + VAE + RL models</p>
   
   Adams, Ryan Prescott, and David JC MacKay. "Bayesian online changepoint detection." arXiv preprint arXiv:0710.3742 (2007).</p>
 
-The VAE is referred from the following:
+The VAE is referred from <a href="https://www.ibm.com/think/topics/variational-autoencoder">here<a>
 
 The Reinforced Learning model is basically an Actor-Critic model.
 
