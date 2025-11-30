@@ -36,6 +36,12 @@ def check_cointegration_and_hedge_ratio(series1, series2):
         return None, None
 
 def alpha_beta(strategy_returns, benchmark_returns, freq=252):
+    """
+    Computes annual Alpha and Beta for strategy returns with respect 
+    to benchmark returns.
+
+    Returns: Alpha, Beta
+    """
     # Convert pandas Series to numpy arrays if they are not already
     if isinstance(benchmark_returns, pd.Series):
         benchmark_returns = benchmark_returns.values
@@ -52,20 +58,24 @@ def alpha_beta(strategy_returns, benchmark_returns, freq=252):
     return alpha, beta
 
 def annual_volatility(returns, freq=252):
+    # Computes annual volatility for input returns
     return np.std(returns) * np.sqrt(freq)
 
 def sharpe_ratio(returns, risk_free_rate=0.0, periods_per_year=252):
+    # Computes annual Sharpe Ratio for input data
     excess_returns = returns - risk_free_rate
     mean = np.mean(excess_returns)
     std = np.std(excess_returns) + 1e-8
     return (mean / std) * np.sqrt(periods_per_year)
 
 def sortino_ratio(returns, freq=252):
+    # Computes annual Sortino Ratio for input data
     mean_ret = np.mean(returns)
     downside = np.std(returns[returns < 0])
     return (mean_ret / downside) * np.sqrt(freq)
     
 def compute_max_drawdown(equity_curve):
+      # Computes percentage Max drawdown for input data
       equity_curve = np.asarray(equity_curve)
       if len(equity_curve) < 2:
           return 0.0
@@ -83,6 +93,8 @@ def evaluate_composite_score(trades, cost_per_trade, freq_per_year=252):
       trades: realized returns (after the agent’s actions).
       cost_per_trade: proportional transaction cost (e.g., 0.001 for 10 bps).
       freq_per_year: periods per year (default 252 for daily).
+
+      Returns: composite score
       """
       r = np.asarray(trades)
       if len(r) < 2:
