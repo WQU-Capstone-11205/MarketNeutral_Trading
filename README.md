@@ -21,4 +21,4 @@ The Reinforced Learning model is basically an Actor-Critic model.
 <p>The Jupyter notebooks are located <a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/Notebooks">here</a> </p>
 
 <hl>**Installation:**</hl>
-<p>**pip install -r requirements.txt**</p>
+<p>pip install -r requirements.txt</p>
