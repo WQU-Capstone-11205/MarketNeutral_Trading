@@ -43,6 +43,8 @@ def backtest_strategy(data, beta, entry_threshold=2, exit_threshold=0.5):
 
         # RL-style reward: delta spread × position, normalized by variance
         raw_reward = float(action * ret)
+        if raw_reward == 0:
+            raw_reward = eps
         reward = raw_reward / (math.sqrt(var) + eps)
 
         pnls.append(raw_reward)
