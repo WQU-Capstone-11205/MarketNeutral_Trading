@@ -5,6 +5,23 @@ import os, json
 def save_RLmodels(save_dir, actor, critic, vae_encoder,
                     actor_opt, critic_opt, vae_opt,
                     bocpd_cfg, meta, step=None):
+    """
+    Save RL models for BOCPD+VAE+RL hybrid model
+
+    Input:
+      save_dir: saving directory name
+      actor: actor model to be saved
+      critic: critic model to be saved
+      vae_encoder: vae model to be saved
+      actor_opt: actor optimizer to be saved
+      critic_opt: critic optimizer to be saved
+      vae_opt: VAE optimizer to be saved
+      bocpd_cfg: Configuration meta file for BOCPD
+      meta: meta file to store the log details of the save model state
+
+    Exit:
+      Save all the models and their optimizer to the save_dir folder
+    """
     os.makedirs(save_dir, exist_ok=True)
     tag = f"_step{step}" if step is not None else ""
 
@@ -25,6 +42,23 @@ def save_RLmodels(save_dir, actor, critic, vae_encoder,
 def load_RLmodels(load_dir, actor, critic, vae_encoder,
                     actor_opt, critic_opt, vae_opt,
                     device, step=None):
+    """
+    Load RL models for BOCPD+VAE+RL hybrid model
+
+    Input:
+      load_dir: loading directory name
+      actor: actor model to be loaded
+      critic: critic model to be loaded
+      vae_encoder: vae model to be loaded
+      actor_opt: actor optimizer to be loaded
+      critic_opt: critic optimizer to be loaded
+      vae_opt: VAE optimizer to be loaded
+      bocpd_cfg: Configuration meta file for BOCPD
+      meta: meta file to store the log details of the save model state
+    
+    Exit:
+      Load all the models and their optimizer from the load_dir folder
+    """
     tag = f"_step{step}" if step is not None else ""
     actor.load_state_dict(torch.load(os.path.join(load_dir, f"actor{tag}.pth"), map_location=device))
     critic.load_state_dict(torch.load(os.path.join(load_dir, f"critic{tag}.pth"), map_location=device))
@@ -44,6 +78,20 @@ def load_RLmodels(load_dir, actor, critic, vae_encoder,
 def save_models(save_dir, model, vae_encoder,
                     model_opt, vae_opt,
                     bocpd_cfg, meta, step=None):
+    """
+    Save models for all hybrid model except for BOCPD+VAE+RL
+
+    Input:
+      save_dir: saving directory name
+      vae_encoder: vae model to be saved
+      model_opt: model optimizer to be saved
+      vae_opt: VAE to be saved
+      bocpd_cfg: Configuration meta file for BOCPD
+      meta: meta file to store the log details of the save model state
+
+    Exit:
+      Save all the models and their optimizer to the save_dir folder
+    """
     os.makedirs(save_dir, exist_ok=True)
     tag = f"_step{step}" if step is not None else ""
 
@@ -62,6 +110,20 @@ def save_models(save_dir, model, vae_encoder,
 def load_models(load_dir, model, vae_encoder,
                     model_opt, vae_opt,
                     device, step=None):
+    """
+    Load models for all hybrid models except BOCPD+VAE+RL
+
+    Input:
+      load_dir: loading directory name
+      model: model to be loaded
+      vae_encoder: vae model to be loaded
+      model_opt: model optimizer to be loaded
+      vae_opt: VAE optimizer to be loaded
+    
+    Exit:
+      Load all the models and their optimizer from the load_dir folder
+    """
+
     tag = f"_step{step}" if step is not None else ""
     model.load_state_dict(torch.load(os.path.join(load_dir, f"model{tag}.pth"), map_location=device))
     vae_encoder.load_state_dict(torch.load(os.path.join(load_dir, f"vae{tag}.pth"), map_location=device))
