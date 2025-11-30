@@ -21,6 +21,12 @@ from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.models_io import load_RLmodels
 
 def evaluate_loop(data, seq_len = 50, total_steps = 100000, load_dir="checkpoints", device="cpu", exploration=False):
+    """
+    evaluate_loop: This is the initial version of the evaluate loop.
+    This file is just kept for backward compatibility. There are 
+    some old Jupyter Notebooks that use this file.
+    It's currently not used in our WQU project.
+    """
     state_window = 50
     seq_len_for_vae = 50
     input_dim = 2  # [return, bocpd_prob] per timestep into encoder
