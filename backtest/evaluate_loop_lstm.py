@@ -32,6 +32,12 @@ def evaluate_loop_lstm(
           stop_loss_penalty=0.001    # optional penalty for hitting stop-loss
     ):
     """
+    **********************************************************************
+    ####### CURRENTLY NOT USED ##########
+    This was one of the models selected for the WQU project, but eventually
+    abandoned it, as it was more complex to tune it within the specified time period
+    **********************************************************************
+    
     Evaluate a trained LSTM policy and encoder with VAE + BOCPD context.
     Automatically loads saved models using load_all_models().
 
@@ -45,7 +51,8 @@ def evaluate_loop_lstm(
         plot: whether to show cumulative return plot
 
     Returns:
-        dict with Sharpe ratio, total return, cumulative returns, actions, and pnl
+        dict with change probabilities, most likely run lengths estimates, changepoint flags, 
+        reconstructed outputs of VAE, portfolio returns, actions, and portfolio returns series
     """
     # ---- Prepare data ----
     if isinstance(stream, pd.Series):
