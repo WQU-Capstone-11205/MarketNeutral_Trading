@@ -17,8 +17,18 @@ The VAE is referred from <a href="https://www.ibm.com/think/topics/variational-a
 The Reinforced Learning model is basically an Actor-Critic model.
 
 <hl>**Examples:**</hl>
-
-<p>The Jupyter notebooks are located <a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/Notebooks">here</a> </p>
+<hl>**Project folder structure:**</hl>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/Notebooks">Notebooks: All the Jupyter notebooks are located</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/backtest">backtest</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/data_loading">data_loading</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/metrics">metrics</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/ml_dl_models">ml_dl_models</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/plots">plots</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/structural_break">structural_break</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/trad_arbt_strat">trad_arbt_strat</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/train">train</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/tuning">tuning</a> </p>
+<p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/util">util</a> </p>
 
 <hl>**Installation:**</hl>
 <p>pip install -r requirements.txt</p>
