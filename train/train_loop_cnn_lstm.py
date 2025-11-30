@@ -33,6 +33,24 @@ def train_loop_cnnlstm(
     stop_loss_penalty=0.001,
     seed: int = 42
 ):
+    """
+    Training loop for CNN-LSTM policy with VAE + BOCPD context.
+    Args:
+        stream: pd.Series or np.ndarray of returns
+        bocpd_params, vae_params, cnnlstm_params, joint_params: dict with parameters
+        num_epochs: models to be trained for number of epochs
+        save_dir: path to the saved models directory (where save_all_models() stored them)
+        total_steps: maximum limit of time steps
+        device: 'cpu' or 'cuda'
+        stop_loss_threshold, stop_loss_penalty: used for early stopping
+        seed: for random seeding
+
+    Exit:
+        Save models for the best score.
+        Early stopping when the scores don't change beyond a threshold
+        Displays stop-loss triggered for number of PnLs
+    """
+    
     seed_random()
 
     state_window=joint_params['state_window']
