@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def vae_plot(input_spread, recon_spread):
+    """
+    Plot of VAE Reconstructed spread superimposed on input spread
+    """
     plt.plot(input_spread.index, input_spread, label="Original Spread")
     plt.plot(input_spread.index, recon_spread, label="Reconstructed Spread")
     plt.xlabel("Date")
@@ -11,6 +14,10 @@ def vae_plot(input_spread, recon_spread):
     plt.show()
   
 def compare_trends_plot(input_spread, results):
+    """
+    Comparison plots of Profit and loss with 
+    input spread.
+    """
     fig, ax1 = plt.subplots(figsize=(12, 5))
 
     ax1.plot(input_spread.index, input_spread, label='Distance Spread', color='gray')
@@ -27,6 +34,9 @@ def compare_trends_plot(input_spread, results):
     plt.show()
 
 def drawdown_plot(returns):
+    """
+    Drawdown plot of portfolio returns
+    """
     cum_pnl = np.cumsum(returns)
     rolling_max = np.maximum.accumulate(cum_pnl)
     drawdown = (rolling_max - cum_pnl) # / (rolling_max + 1e-8)
