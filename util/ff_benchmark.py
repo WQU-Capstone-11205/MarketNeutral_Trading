@@ -6,6 +6,16 @@ from pandas_datareader import data as pdr
 from pandas_datareader.famafrench import FamaFrenchReader
 
 def get_ff_benchmark_returns(start_date, end_date, freq='D'):
+    """
+    Download the Fama‑French factors of daily
+    Input:
+        start_date: starting date of the FF benchmark 
+        end_date: ending date of the FF benchmark
+        freq: Daily ('D')
+
+    Output:
+        Fama‑French factors returns
+    """
     # Download Fama‑French factors
     # Example: “F‑F_Research_Data_Factors” gets monthly; you can also use daily versions
     ff = FamaFrenchReader('F-F_Research_Data_Factors_Daily', # or _Daily if you need daily data
