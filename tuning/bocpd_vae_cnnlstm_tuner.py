@@ -18,6 +18,7 @@ from tuning.bocpd_vae_tuner import BOCPD_VAE_Tuner
 from util.seed_random import seed_random
 
 class BOCPD_VAE_CNNLSTM_Tuner(BOCPD_VAE_Tuner):
+    #CNN LSTM hyperparameter ranges
     default_cnnlstm_space = {
         "input_dim": [2],
         "cnn_channels": [32, 48],
@@ -32,6 +33,7 @@ class BOCPD_VAE_CNNLSTM_Tuner(BOCPD_VAE_Tuner):
         "gamma": [0.95, 0.99, 1.0]
     }
 
+    #Joint hyperparameter ranges
     default_joint_space = {
         "state_window": [25, 50],
         "base_action_sigma": [0.01, 0.1],
@@ -42,6 +44,7 @@ class BOCPD_VAE_CNNLSTM_Tuner(BOCPD_VAE_Tuner):
         "exploration_alpha": [5.0, 6.5, 10.0]
     }
 
+    #Best CNN-LSTM hyperparameters configured
     best_cnnlstm_params = {
         "input_dim" : 2,
         "cnn_channels": 32,
@@ -56,6 +59,7 @@ class BOCPD_VAE_CNNLSTM_Tuner(BOCPD_VAE_Tuner):
         "gamma": 0.99
     }
 
+    #Best Joint hyperparameters configured
     best_joint_params = {
         "state_window": 25,
         "base_action_sigma": 0.01,
@@ -72,6 +76,8 @@ class BOCPD_VAE_CNNLSTM_Tuner(BOCPD_VAE_Tuner):
                  custom_joint_space: Dict[str, List[Any]]=None):
         """
         Args:
+            custom_bocpd_space: dict of BOCPD, StudentT hyperparameter ranges
+            custom_vae_space: dict of VAE hyperparameter ranges
             custom_cnnlstm_space: dict of CNN-LSTM hyperparameter ranges
             custom_joint_space: dict for joint tuning of BOCPD, VAE, and CNN-LSTM
         """
@@ -86,6 +92,18 @@ class BOCPD_VAE_CNNLSTM_Tuner(BOCPD_VAE_Tuner):
         self.best_joint_params = BOCPD_VAE_CNNLSTM_Tuner.best_joint_params.copy()
 
     def tune_cnnlstm(self, data, change_probs, cpflags, mus):
+        """
+        Auto tune CNN-LSTM hybrid model hyperparameters
+        Input:
+            data: Training data spread
+            change_probs: Change probabilities from BOCPD
+            cpflags: Change point flags from BOCPD
+            mus: Latent variables from VAE
+
+        Exit:
+            Save and return the best hyperparameters
+            Return the best score
+        """
         # initialize random seed
         seed_random()
         stop_loss_threshold=-0.02 # Hardcoded for now (maybe tunable like hyperparams)
@@ -250,6 +268,19 @@ class BOCPD_VAE_CNNLSTM_Tuner(BOCPD_VAE_Tuner):
         return best_params, best_score
 
     def joint_tuning(self, data, best_lstm_params, change_probs, cpflags, mus):
+        """
+        Auto tune joint hyperparameters of the CNN-LSTM hybrid model
+        Input:
+            data: Training data spread
+            best_lstm_params: best cnn-lstm parameters
+            change_probs: Change probabilities from BOCPD
+            cpflags: Change point flags from BOCPD
+            mus: Latent variables from VAE
+
+        Exit:
+            Save and return the best joint hyperparameters
+            Return the best score
+        """
         # initialize random seed
         seed_random()
         stop_loss_threshold=-0.02 # Hardcoded for now (maybe tunable like hyperparams)
@@ -411,6 +442,15 @@ class BOCPD_VAE_CNNLSTM_Tuner(BOCPD_VAE_Tuner):
         return best_params, best_score
 
     def tune(self, data):
+        """
+        Auto tune hyperparameters main function for CNN-LSTM hybrid model
+        Input:
+            data: Training data spread
+        
+        Exit:
+            Display the best hyperparameters
+            Display the best score
+        """
         best_bocpd_params, best_bocpd_score, cps, cpflags, runtime_len = self.tune_bocpd(data)
         print(f"Best BOCPD parameters: {best_bocpd_params}")
         print(f"Best BOCPD score: {round(best_bocpd_score,3)}")
