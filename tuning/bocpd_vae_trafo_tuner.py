@@ -11,7 +11,7 @@ from typing import Dict, List, Any
 from itertools import product
 
 from util.running_mean_std import RunningMeanStd
-from util.metrics import evaluate_composite_score
+from metrics.stats import evaluate_composite_score
 from ml_dl_models.transformer import TransformerModel
 from util.weighted_replay_buffer import WeightedReplayBuffer
 from tuning.bocpd_vae_tuner import BOCPD_VAE_Tuner
