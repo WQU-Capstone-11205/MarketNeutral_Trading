@@ -74,6 +74,18 @@ class BOCPD_VAE_Tuner:
         self.best_vae_params = BOCPD_VAE_Tuner.best_vae_params.copy()
 
     def tune_bocpd(self, data):
+        """
+        Auto tune BOCPD model hyperparameters
+        Input:
+            data: Training data spread
+ 
+        Exit:
+            Save and return the best hyperparameters
+            Return the best score
+            best_change_probs: Best Change probabilities from BOCPD
+            best_cp_flags: Best Change point flags from BOCPD
+            best_rts: Best most likely run length estimates
+        """
         seed_random()
         best_score, best_params = -np.inf, None
         best_change_probs, best_cp_flags, best_rts = None, None, None
@@ -99,6 +111,17 @@ class BOCPD_VAE_Tuner:
         return best_params, best_score, best_change_probs, best_cp_flags, best_rts
 
     def tune_vae(self, data, cp_probs):
+        """
+        Auto tune VAE model hyperparameters
+        Input:
+            data: Training data spread
+            cp_probs: Change probabilities from BOCPD model
+ 
+        Exit:
+            Save and return the best hyperparameters
+            Return the best score
+            best_z_ts: Best latent variables from VAE
+        """
         seed_random()
         best_score, best_params = -np.inf, None
         best_z_ts = None
