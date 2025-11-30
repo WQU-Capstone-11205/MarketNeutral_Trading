@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import datetime as dt
 
+# Download yfinance data for the given tickers
 def fetch_from_yfinance(tickers, start_date=None, end_date=None):
     if end_date is None:
         end_date = dt.date.today()
