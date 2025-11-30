@@ -164,11 +164,13 @@ def evaluate_loop_rl(
         rms.update([cur_ret])
         global_mean = rms.mean
         global_var = rms.var
-        # BOCPD expects scalar observation -> use normalized return
+              
+        # BOCPD update (normalized observation)
         norm_ret = float((cur_ret - rms.mean) / (math.sqrt(rms.var) + 1e-8))
         change_prob, _ = bocpd.update(norm_ret)  # float in [0,1]
         cp_probs.append(change_prob)
-        # build encoder input sequence (seq_len_for_vae)
+        
+        # build VAE input window
         seq_start = max(0, step - seq_len_for_vae + 1)
         seq_rets = data[seq_start: step + 1]
         cps_seq = cp_probs[seq_start: step + 1] ####
@@ -177,17 +179,20 @@ def evaluate_loop_rl(
         else:
             cur_dif = data[step] - data[step-1]
         vae_state_diff = np.append(vae_state_diff, cur_dif)
+        
         # pad if needed
         if len(seq_rets) < seq_len_for_vae:
             pad = np.zeros(seq_len_for_vae - len(seq_rets))
             seq_rets = np.concatenate([pad, seq_rets])
             cps_pad = np.zeros(seq_len_for_vae - len(cps_seq)) ####
             cps_seq = np.concatenate([cps_pad, cps_seq]) ####
+        
         # form encoder input: (seq_len, input_dim) where input_dim = [norm_ret, change_prob]
         seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8),
                               cps_seq ], axis=-1)[None, ...]  # batch=1
         seq_inp_t = torch.tensor(seq_inp, dtype=torch.float32).to(device)
 
+        # VAE forward (no-grad)
         with torch.no_grad():
             x_hat, mu, logvar, z_t = vae_encoder(seq_inp_t)
             recon_np = x_hat.detach().cpu().numpy()[0, :, 0]  # seq_len values
@@ -203,6 +208,7 @@ def evaluate_loop_rl(
             recon_ch0 = recon_last_denorm
             inp_ch1 = change_prob
             recon_ch1 = recon_cp_last_norm
+            # accumulate recon errors
             errors_ch0.append(np.mean((inp_ch0 - recon_ch0)**2))
             errors_ch1.append(np.mean((inp_ch1 - recon_ch1)**2))
 
@@ -215,9 +221,12 @@ def evaluate_loop_rl(
 
         state_t = torch.tensor(state_norm.astype(np.float32))[None, :].to(device)
 
+        # actor forward
         with torch.no_grad():
             z_t_det = mu # z_t
             action_mean = actor(state_t, z_t_det).cpu().numpy().squeeze()
+
+        # exploration vs deterministic gating by cp-prob
         if exploration:
             # live adaptive (adds regime-scaled noise)
             noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob) # alpha = 5.0
@@ -229,6 +238,7 @@ def evaluate_loop_rl(
         next_ret = data[step + 1]
 
         eps = 1e-8
+        # reward with transaction cost
         raw_reward = float(action * (next_ret - cur_ret))
         reward = raw_reward / (math.sqrt(rms.var) + eps)
         trans_cost = tc * float(np.abs(action - last_action).sum())
@@ -242,7 +252,7 @@ def evaluate_loop_rl(
         stop_triggered = False
         if cumulative_pnl <= stop_loss_threshold:
             reward -= abs(stop_loss_penalty)          # penalize
-            action = 0.0                                # force flat
+            action = 0.0                              # force flat
             stop_triggered = True
             stop_loss_count += 1
             cumulative_pnl = 0.0
