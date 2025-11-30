@@ -39,10 +39,9 @@ def train_loop_trafo(
     Args:
         stream: pd.Series or np.ndarray of returns
         bocpd_params, vae_params, trafo_params, joint_params: dict with parameters
-        save_dir: path to the save models directory (where save_all_models() stored them)
+        save_dir: path to the save models directory
         total_steps: maximum time steps limit 
         device: 'cpu' or 'cuda'
-        exploration: used if stochasticity is required for the evaluation loop
         stop_loss_threshold, stop_loss_penalty: used for early stopping
         seed: for random seeding
 
@@ -68,7 +67,7 @@ def train_loop_trafo(
         data = np.asarray(stream)
         dates = None
 
-    # (BOCPD, encoder, transformer initialization unchanged)
+    # BOCPD, encoder, transformer initialization
     bocpd = BOCPD(
                   ConstantHazard(bocpd_hazard),
                   StudentT(
