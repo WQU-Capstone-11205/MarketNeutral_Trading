@@ -2,8 +2,8 @@ import math
 import pandas as pd
 import numpy as np
 
-def backtest_strategy(data, beta, entry_threshold=2, exit_threshold=0.5):
-    """Generates trading signals based on z-score and backtests the strategy."""
+def cointegration_trading(data, beta, entry_threshold=2, exit_threshold=0.5):
+    """Generates trading signals based on cointegration spread strategy."""
     # Calculate the spread
     spread = data.iloc[:, 1] - beta * data.iloc[:, 0]
     # Calculate z-score of the spread
