@@ -45,9 +45,12 @@ def evaluate_loop_cnnlstm(
         bocpd_params, vae_params, cnnlstm_params, joint_params: dict with parameters
         load_dir: path to the saved models directory (where save_all_models() stored them)
         device: 'cpu' or 'cuda'
+        stop_loss_threshold, stop_loss_penalty: used for early stopping
+        seed: for random seeding
 
     Returns:
-        dict with Sharpe ratio, total return, cumulative returns, actions, and pnl
+        dict with change probabilities, most likely run lengths estimates, changepoint flags, 
+        reconstructed outputs of VAE, portfolio returns, actions, and portfolio returns series
     """
     # ---- Prepare data ----
     if isinstance(stream, pd.Series):
