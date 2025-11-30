@@ -8,7 +8,7 @@ from typing import Dict, List, Any
 from itertools import product
 
 from util.running_mean_std import RunningMeanStd
-from util.metrics import evaluate_composite_score
+from metrics.stats import evaluate_composite_score
 from util.seed_random import seed_random
 from ml_dl_models.actor_critic import Actor
 from ml_dl_models.actor_critic import Critic
