@@ -66,6 +66,8 @@ class BOCPD_VAE_TRAFO_Tuner(BOCPD_VAE_Tuner):
                  custom_joint_space: Dict[str, List[Any]]=None):
         """
         Args:
+            custom_bocpd_space: dict of BOCPD, StudentT hyperparameter ranges
+            custom_vae_space: dict of VAE hyperparameter ranges
             custom_trafo_space: dict of TRAFO hyperparameter ranges
             custom_joint_space: dict for joint tuning of BOCPD, VAE, and TRAFO
         """
@@ -80,6 +82,18 @@ class BOCPD_VAE_TRAFO_Tuner(BOCPD_VAE_Tuner):
         self.best_joint_params = BOCPD_VAE_TRAFO_Tuner.best_joint_params.copy()
 
     def tune_trafo(self, data, change_probs, cpflags, mus):
+        """
+        Auto tune Transformer hybrid model hyperparameters
+        Input:
+            data: Training data spread
+            change_probs: Change probabilities from BOCPD
+            cpflags: Change point flags from BOCPD
+            mus: Latent variables from VAE
+
+        Exit:
+            Save and return the best hyperparameters
+            Return the best score
+        """
         # initialize random seed
         seed_random()
         stop_loss_threshold=-0.02 # Hardcoded for now (maybe tunable like hyperparams)
@@ -239,6 +253,18 @@ class BOCPD_VAE_TRAFO_Tuner(BOCPD_VAE_Tuner):
         return best_params, best_score
 
     def joint_tuning(self, data, change_probs, cpflags, mus):
+        """
+        Auto tune joint hyperparameters of the Transformer hybrid model
+        Input:
+            data: Training data spread
+            change_probs: Change probabilities from BOCPD
+            cpflags: Change point flags from BOCPD
+            mus: Latent variables from VAE
+
+        Exit:
+            Save and return the best joint hyperparameters
+            Return the best score
+        """
         # initialize random seed
         seed_random()
         stop_loss_threshold=-0.02 # Hardcoded for now (maybe tunable like hyperparams)
@@ -398,6 +424,15 @@ class BOCPD_VAE_TRAFO_Tuner(BOCPD_VAE_Tuner):
         return best_params, best_score
 
     def tune(self, data):
+        """
+        Auto tune hyperparameters main function for Transformer hybrid model
+        Input:
+            data: Training data spread
+        
+        Exit:
+            Display the best hyperparameters
+            Display the best score
+        """
         best_bocpd_params, best_bocpd_score, cps, cpflags, runtime_len = self.tune_bocpd(data)
         print(f"Best BOCPD parameters: {best_bocpd_params}")
         print(f"Best BOCPD score: {round(best_bocpd_score,3)}")
