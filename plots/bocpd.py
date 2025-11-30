@@ -6,6 +6,9 @@ from structural_break.distribution import StudentT
 from structural_break.bocpd import BOCPD
 
 def plot_change_points(spread):
+    """
+    Plot of change points marked on the input spread.
+    """
     # Initialize object
     bc = BOCPD(ConstantHazard(300), StudentT(mu=0, kappa=1, alpha=1, beta=1))
     spread_data = spread.copy()
@@ -31,6 +34,10 @@ def plot_change_points(spread):
     plt.legend()
 
 def plot_rt_change_probs(data, rt_mle, change_probs):
+    """
+    Plot of change probability, most likely run length, 
+    along with input spread
+    """
     sz = len(data)
     # --- Plot results ---
     fig, ax1 = plt.subplots(figsize=(12, 5))
@@ -57,6 +64,9 @@ def plot_rt_change_probs(data, rt_mle, change_probs):
     plt.show()
 
 def vae_plot(input_spread, recon_spread):
+    """
+    Plot of reconstructed spread superimposed on input spread.
+    """
     plt.plot(input_spread.index, input_spread, label="Original Spread")
     plt.plot(input_spread.index, recon_spread, label="Reconstructed Spread")
     plt.xlabel("Date")
@@ -66,6 +76,9 @@ def vae_plot(input_spread, recon_spread):
     plt.show()
   
 def compare_trends_plot(input_spread, results):
+    """
+    Plot of Profit and Loss along with the input spread.
+    """
     fig, ax1 = plt.subplots(figsize=(12, 5))
 
     # --- compute common limits ---
@@ -96,6 +109,9 @@ def compare_trends_plot(input_spread, results):
     plt.show()
 
 def drawdown_plot(returns):
+    """
+    Drawdown plot of the input data
+    """
     cum_pnl = np.cumsum(returns)
     rolling_max = np.maximum.accumulate(cum_pnl)
     drawdown = (rolling_max - cum_pnl) / (rolling_max + 1e-8)
@@ -107,6 +123,10 @@ def drawdown_plot(returns):
     plt.show()
 
 def compare_drawdown_plot(spread_returns, pnl_returns):
+    """
+    Drawdown comparison plots of profit and loss, 
+    and input spread 
+    """
     cum_spread = np.cumsum(spread_returns)
     rolling_max_spread = np.maximum.accumulate(cum_spread)
     drawdown_spread = (rolling_max_spread - cum_spread) / (rolling_max_spread + 1e-8)
