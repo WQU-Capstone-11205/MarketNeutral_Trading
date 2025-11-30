@@ -1,7 +1,18 @@
 import numpy as np
 import pandas as pd
 
-def policy_stability_metrics(actions, eps=1e-3, small_rev_thresh=0.02):
+def policy_stability_metrics(
+        actions, 
+        eps=1e-3, 
+        small_rev_thresh=0.02
+    ):
+    """
+    Compute policy stability metrics for actions
+
+    Returns:
+      details: list of dicts with per-stability metrics:
+        {'reversal_rate_per_step', 'acf1'}
+    """
     a = np.asarray(actions)
     N = len(a)
 
