@@ -4,6 +4,7 @@ import datetime as dt
 import statsmodels.api as sm
 from statsmodels.tsa.stattools import coint
 
+# Calculate spread with hedge ratio of means 
 def distance_spread(tickers, start_date=None, end_date=None):
     if end_date is None:
         end_date = dt.date.today()
