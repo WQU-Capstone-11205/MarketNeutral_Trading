@@ -4,7 +4,7 @@ Created date: Sept 10, 2025
 
 Created by: Santosh More
 
-<p>Introduction:
+<p>**Introduction:**
 
 This Hybrid model is made of BOCPD + VAE + RL models</p>
 
@@ -16,9 +16,9 @@ The VAE is referred from <a href="https://www.ibm.com/think/topics/variational-a
 
 The Reinforced Learning model is basically an Actor-Critic model.
 
-Examples
+<p>**Examples**
 
-The Jupyter notebooks are located <a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/Notebooks">here</a>
+The Jupyter notebooks are located <a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/Notebooks">here</a> </p>
 
 Installation
 $ pip install -r requirements.txt
