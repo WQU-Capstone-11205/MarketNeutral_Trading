@@ -70,6 +70,8 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
                  custom_joint_space: Dict[str, List[Any]]=None):
         """
         Args:
+            custom_bocpd_space: dict of BOCPD, StudentT hyperparameter ranges
+            custom_vae_space: dict of VAE hyperparameter ranges
             custom_rl_space: dict of RL hyperparameter ranges
             custom_joint_space: dict for joint tuning of BOCPD, VAE, and RL
         """
@@ -84,6 +86,18 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         self.best_joint_params = BOCPD_VAE_RL_Tuner.best_joint_params.copy()
 
     def tune_rl(self, data, change_probs, cpflags, z_ts):
+        """
+        Auto tune RL hybrid model hyperparameters
+        Input:
+            data: Training data spread
+            change_probs: Change probabilities from BOCPD
+            cpflags: Change point flags from BOCPD
+            z_ts: Latent variables from VAE
+
+        Exit:
+            Save and return the best hyperparameters
+            Return the best score
+        """
         # initialize random seed
         seed_random()
         base_action_sigma = 0.1
@@ -191,6 +205,19 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         return best_params, best_score
 
     def joint_tuning(self, data, best_rl_params, change_probs, cpflags, z_ts):
+        """
+        Auto tune joint hyperparameters of the RL hybrid model
+        Input:
+            data: Training data spread
+            best_rl_params: best rl parameters
+            change_probs: Change probabilities from BOCPD
+            cpflags: Change point flags from BOCPD
+            z_ts: Latent variables from VAE
+
+        Exit:
+            Save and return the best joint hyperparameters
+            Return the best score
+        """
         # initialize random seed
         seed_random()
         device = 'cpu'
@@ -295,6 +322,15 @@ class BOCPD_VAE_RL_Tuner(BOCPD_VAE_Tuner):
         return best_params, best_score
 
     def tune(self, data):
+        """
+        Auto tune hyperparameters main function for RL hybrid model
+        Input:
+            data: Training data spread
+        
+        Exit:
+            Display the best hyperparameters
+            Display the best score
+        """
         seed_random()
         best_bocpd_params, best_bocpd_score, cps, cpflags, runtime_len = self.tune_bocpd(data)
         print(f"Best BOCPD parameters: {best_bocpd_params}")
