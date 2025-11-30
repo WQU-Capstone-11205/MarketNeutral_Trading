@@ -16,7 +16,6 @@ The VAE is referred from <a href="https://www.ibm.com/think/topics/variational-a
 
 The Reinforced Learning model is basically an Actor-Critic model.
 
-<hl>**Examples:**</hl>
 <hl>**Project folder structure:**</hl>
 <p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/Notebooks">Notebooks:</a> All Hybrid and traditional model's Jupyter notebooks are located here </p>
 <p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/backtest">backtest:</a> Evaluation loops for all Hybrid models are located here </p>
