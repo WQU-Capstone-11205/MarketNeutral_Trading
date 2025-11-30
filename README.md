@@ -21,4 +21,4 @@ Examples
 The Jupyter notebooks are located <a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/Notebooks">here</a>
 
 Installation
-$ pip install bocd
+$ pip install -r requirements.txt
