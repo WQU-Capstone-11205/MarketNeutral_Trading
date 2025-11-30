@@ -2,6 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def compare_trends_plot(input_spread, results):
+    """
+    Comparison trend plots of Profit and Loss with 
+    input spread
+    """
     fig, ax1 = plt.subplots(figsize=(12, 5))
 
     ax1.plot(input_spread.index, input_spread, label='Spread', color='gray')
@@ -18,6 +22,9 @@ def compare_trends_plot(input_spread, results):
     plt.show()
 
 def drawdown_plot(returns):
+    """
+    Drawdown plot input data
+    """
     cum_pnl = np.cumsum(returns)
     rolling_max = np.maximum.accumulate(cum_pnl)
     drawdown = (rolling_max - cum_pnl) # / (rolling_max + 1e-8)
