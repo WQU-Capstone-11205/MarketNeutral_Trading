@@ -11,6 +11,20 @@ import pandas as pd
 # -------------------------
 class BOCPD:
     def __init__(self, hazard, distribution):
+        """
+        Initialize the BOCPD model.
+        
+        Args:
+            hazard: A callable function returning the hazard probability H(r) for a given run length.
+            distribution: A distribution object with pdf() and update_params() methods.
+        
+        Initializes internal variables:
+            T: Current time step
+            beliefs: Matrix representing the run length posterior probabilities
+            change_probs: List of change probabilities
+            cp_flags: List of changepoint flags
+            rt_mle: List of most likely run lengths
+        """
         self.hazard = hazard
         self.distribution = distribution
         self.T = 0
@@ -21,15 +35,19 @@ class BOCPD:
         self.rt_mle = []
 
     def reset_params(self):
+        # Reset the model to its initial state
         self.T = 0
         self.beliefs = np.zeros((1, 2))
         self.beliefs[0, 0] = 1.0
 
     def _expand_belief_matrix(self):
+        # Expand the belief matrix for a new time step
+        # Adds a row for the next run length probabilities
         rows = np.zeros((1, 2))
         self.beliefs = np.concatenate((self.beliefs, rows), axis=0)
 
     def _shift_belief_matrix(self):
+        # Moves the new probabilities to the prior column and clears the next column for updates
         self.beliefs[:, 0] = self.beliefs[:, 1]
         self.beliefs[:, 1] = 0.0
 
