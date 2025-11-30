@@ -1,12 +1,12 @@
-<hl>MarketNeutral_Trading: Long/Short pair trading strategy using Hybrid ML model</hl>
+<hl>**MarketNeutral_Trading: Long/Short pair trading strategy using Hybrid ML model**</hl>
 
 Created date: Sept 10, 2025
 
 Created by: Santosh More
 
-Introduction
+<p>Introduction:
 
-<p>This Hybrid model is made of BOCPD + VAE + RL models</p>
+This Hybrid model is made of BOCPD + VAE + RL models</p>
 
 <p>The BOCPD algorithm is based on the following paper:
   
