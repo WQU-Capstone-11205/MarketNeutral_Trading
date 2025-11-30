@@ -36,6 +36,24 @@ def evaluate_loop_trafo(
           stop_loss_penalty=0.001,
           seed: int = 42
     ):
+    """
+    Evaluate a trained Transformer policy with VAE + BOCPD context.
+    Automatically loads saved models using load_all_models().
+
+    Args:
+        stream: pd.Series or np.ndarray of returns
+        bocpd_params, vae_params, trafo_params, joint_params: dict with parameters
+        load_dir: path to the saved models directory (where save_all_models() stored them)
+        total_steps: maximum time steps limit 
+        device: 'cpu' or 'cuda'
+        exploration: used if stochasticity is required for the evaluation loop
+        stop_loss_threshold, stop_loss_penalty: used for early stopping
+        seed: for random seeding
+
+    Returns:
+        dict with change probabilities, most likely run lengths estimates, changepoint flags, 
+        reconstructed outputs of VAE, portfolio returns, actions, and portfolio returns series
+    """
     # prepare and seed
     if isinstance(stream, pd.Series):
         data = stream.values
