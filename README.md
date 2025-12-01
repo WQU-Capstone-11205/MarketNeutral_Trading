@@ -36,3 +36,19 @@ The Reinforced Learning model is basically an Actor-Critic model.
     <p>!git clone https://github.com/WQU-Capstone-11205/MarketNeutral_Trading.git</p>
     <p>%cd /content/MarketNeutral_Trading</p>
 
+<hl>**Notebooks Rundown: **</hl>
+<p> 
+  1) **Enhanced_Traditional_econometrics_methods.ipynb**: In this Notebook Step 4 has metrics for Cointegration spread and Step 6 for z-score spread.
+  2) **Enhanced_BOCPD_VAE_RL_pipeline_tune_train_test.ipynb**: In this Notebook Step 6 and Step 8 has relevant metrics. Step 7 has BOCPD, VAE and Profit and loss plots.
+  3) Similarly for **Enhanced_BOCPD_VAE_CNN_LSTM_pipeline_tune_train_test.ipynb** and **Enhanced_BOCPD_VAE_TRAFO_pipeline_tune_train_test.ipynb**, In these Notebooks also Step 6 and Step 8 has relevant metrics. Step 7 has BOCPD, VAE and Profit and loss plots.
+  4) The Run All command of Colab Notebook will run all cells and you will get similar results. The results might differ because of Stochastic nature of models, tensors used, even though we have tried too limit the randomness at appropriate places, but the results may differ. It’s good to try few times to watch the results.
+  5) The Hybrid model Colab Notebook files contain all required features of Hybrid model:
+  Step1: Github setup
+  Step2: Data loading
+  Step3: Hyperparameters tuning
+  Step4: Training Hybrid model
+  Step5: Testing model
+  Step6: Display Test metrics
+  Step7: Display plots
+  Step8: Stabalization and Adaptability metrics
+</p>
