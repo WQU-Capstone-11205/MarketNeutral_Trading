@@ -30,4 +30,9 @@ The Reinforced Learning model is basically an Actor-Critic model.
 <p><a href="https://github.com/WQU-Capstone-11205/MarketNeutral_Trading/tree/wqu_dev_branch/util">util:</a> All utility modules like replay buffer, RMS, model IO, benchmark returns, seed random, etc. are located here</p>
 
 <hl>**Installation:**</hl>
-<p>pip install -r requirements.txt</p>
+    <p>pip install -r requirements.txt</p>
+
+<hl>**Instructions (from Colab Notebook):**</hl> 
+    <p>!git clone https://github.com/WQU-Capstone-11205/MarketNeutral_Trading.git</p>
+    <p>%cd /content/MarketNeutral_Trading</p>
+
