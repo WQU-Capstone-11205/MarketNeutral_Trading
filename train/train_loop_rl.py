@@ -288,8 +288,8 @@ def train_loop_rl(
             last_action = action
             
             # if change_prob large, upweight recent transitions
-            if cp_flag == 1:
-                buffer.upweight_recent(window=200, multiplier=joint_params['wt_multplier'])
+            # if cp_flag == 1:
+            #     buffer.upweight_recent(window=200, multiplier=joint_params['wt_multplier'])
 
             # periodic updates
             if buffer.size() >= joint_params['buffer_size_updates'] and step % 8 == 0:
